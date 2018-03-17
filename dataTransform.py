@@ -33,6 +33,8 @@ for line in vocbFile:
 	emb.append( map( float, vec ) ) 
 	#vocbSave.writelines( line[l+1:] )
 
+emb.append( [.0] * d ) 	# the end symbol of sequences assign to the last word in the dictinoary
+
 np.array( emb ).astype('float32').tofile( outDir + '/embMat' + str(d) + '.bin' )
 vocbFile.close()
 #vocbSave.close() 

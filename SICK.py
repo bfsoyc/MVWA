@@ -57,9 +57,9 @@ class SICKData():
 		self.nextIdx = 0
 
 	def printInfo(self):
-		print 'train set : ', len( self.trainSet )
-		print 'valid set : ', len( self.validSet )
-		print 'test set : ' , len( self.testSet )
+		print 'train set:\t', len( self.trainSet )
+		print 'valid set:\t', len( self.validSet )
+		print 'test set:\t' , len( self.testSet )
 		# statistic
 		cnt = [0 for i in range(self.maxLen+1)]
 		for l in self.slenA:
@@ -78,10 +78,10 @@ class SICKData():
 		
 
 
-def loadData( path ):
+def loadData( dataPath, vocbSize = 2 ):
 	data = SICKData()	# a class to capsule all datas
 
-	inFile = open( path, "r" )
+	inFile = open( dataPath, "r" )
 	maxLen = 0	# maximum length of sentences
 	for line in inFile:
 		items = line.split('\t')
@@ -99,9 +99,9 @@ def loadData( path ):
 		maxLen = max( max( maxLen, len(sentA) ),  len(sentB) )
 
 	# adjust each sentence to same length by appeding token 2 to the end
-	# token 2 represents for word '.' in the vacabulary. 
-	data.rawDataA = [ sent + [2]*(maxLen-len(sent)) for sent in data.rawDataA ]
-	data.rawDataB = [ sent + [2]*(maxLen-len(sent)) for sent in data.rawDataB ]
+	# token 'vocbSize-1' represents for the end symbol of sequences, whose word vector is vector of zeros. 
+	data.rawDataA = [ sent + [vocbSize-1]*(maxLen-len(sent)) for sent in data.rawDataA ]
+	data.rawDataB = [ sent + [vocbSize-1]*(maxLen-len(sent)) for sent in data.rawDataB ]
 	data.maxLen = maxLen
 
 	samplesCnt = len(data.rawLabel)

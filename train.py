@@ -23,26 +23,31 @@ class Exp:
 		Exp.para = para
 		
 		dataDir = '../data/expCorpus'
-
-		# load data
-		Exp.datas = SICK.loadData( dataDir + '/inputs.txt' )
-
+			
 		# load embedding matrix
 		d = para.embeddingSize
 		emb = np.fromfile( dataDir+'/embMat' + str(d) + '.bin', dtype = np.float32 )
 		emb.shape = -1,d
 
+		# load data
+		Exp.datas = SICK.loadData( dataDir + '/inputs.txt', emb.shape[0] )
+
+		
+
 		with tf.variable_scope( "embeddingLayer" ):
 			Exp.embMat = tf.get_variable( "embedding", initializer = emb, trainable = para.trainEmbedding )
 
 		if( para.modelType == 1 ):
-			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse , Exp.pr = NLPModel.averageModel( Exp.datas.maxLen )
+			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse , Exp.pr, Exp.emb1, Exp.ave = NLPModel.averageModel( Exp.datas.maxLen )
 		elif( para.modelType == 2 ):
 			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr = NLPModel.rnnModel( Exp.datas.maxLen, Exp.para )
 		elif( para.modelType == 3):
 			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr, Exp.ah1, Exp.ac1, Exp.ah2, Exp.ac2 \
 = NLPModel.selfRnnModel( Exp.datas.maxLen, Exp.para )[0:13]
-
+		elif( para.modelType == 4 ):
+			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr, Exp.st = NLPModel.gridRnnModel( Exp.datas.maxLen, Exp.para )
+		elif( para.modelType == 5 ):
+			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr, Exp.ac, Exp.w, Exp.f = NLPModel.selfAttentionRnnModel( Exp.datas.maxLen, Exp.para )
 		
 	
 	# compute the spearman's rho
@@ -119,23 +124,40 @@ class Exp:
 			if( i % self.para.modelSavePeriod == 0 ):	
 				print 'train loss: ' + str(_loss)
 				# valid set
-				s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet( )
-				#s1,s2, score, slen1, slen2 = Exp.datas.getNextBatch( self.para.batchSize)
+				s1,s2, score, slen1, slen2, idx = Exp.datas.getValidSet( )
 				sc = np.reshape(score,(-1,1))
 				feedDatas = [s1, s2, sc, slen1, slen2 ]
-				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _ah1, _ac1 = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr, self.ah2, self.ac2], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
-
+				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
 				print 'valid loss: ' + str(_loss)
+				print 'prob_MSE ' + str( _prob_mse )
+				print '**** MSE: ' + str( _mse ) + '****'
+				print 'pearson_r: ' , _pr
+				print 'spearman_rho: ', self.__spearman_rho( _y, sc )			 
+
+				# we also examine on test set very time we save a model
+				s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet( )
+				sc = np.reshape(score,(-1,1))
+				feedDatas = [s1, s2, sc, slen1, slen2 ]
+				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _ac, _w, _f = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr, self.ac, self.w, self.f ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
+
+				print 'test loss: ' + str(_loss)
 				print 'prob_MSE ' + str( _prob_mse )
 				print 'MSE: ' + str( _mse )
 				print 'pearson_r: ' , _pr
 				print 'spearman_rho: ', self.__spearman_rho( _y, sc )				
+				
 	
-				print  slen2[:3] 
-				ah1 = _ah1.transpose( [1,0,2] )
-				ac1 = _ac1.transpose( [1,0,2] )
-				print ah1[:3,:,:1]
-				print ac1[:3,:,:1]
+				print 'slen1: %d, slen2: %d' % (slen1[1], slen2[1] )
+				max1 = np.max( slen1 )
+				print np.reshape( _ac[:,1,0], newshape = [ -1] )
+				print np.reshape( _w[:,1,1], newshape = [-1] )
+				print  _f[:2,0] 
+				#print _emb1[9,:,:1]
+				#print _ave[9,:1]				
+				#max1 = np.max( slen1 )
+				#max2 = np.max( slen2 )
+				#print _state.shape
+				#print np.reshape( _state[:,:,1:2, 1:2], newshape = [ max2+1, max1 ]) 
 				#print  slen2[:20]
 				#print idx[:20]
 				#print _y[:20].tolist()
@@ -149,7 +171,7 @@ class Exp:
 				# save model
 				path = self.para.modelSavePath
 				if( i % self.para.modelSavePeriod == 0 ):
-					saver.save( sess, path, global_step = i , write_meta_graph = False )
+					#saver.save( sess, path, global_step = i , write_meta_graph = False )
 					print 'model saved at %s with global step of %d' % (path ,i ) 
 
 				Exp.datas.shuffleTrainSet()
@@ -186,6 +208,7 @@ if __name__ == '__main__':
 	
 	config = 'config.txt'
 	para = confrd.Parameters( config )
+	para.printAll()
 	model = Exp(para)
 	if( para.TrainFlag ):
 		model.train()
