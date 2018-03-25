@@ -2,6 +2,7 @@
 import SICK
 import NLPModel
 import ConfigReader as confrd
+import random
 
 import numpy as np
 import tensorflow as tf
@@ -31,6 +32,7 @@ class Exp:
 
 		# load data
 		Exp.datas = SICK.loadData( dataDir + '/inputs.txt', emb.shape[0] )
+		Exp.datas.loadVocb( dataDir + '/vocb.txt' )
 
 		
 
@@ -38,7 +40,7 @@ class Exp:
 			Exp.embMat = tf.get_variable( "embedding", initializer = emb, trainable = para.trainEmbedding )
 
 		if( para.modelType == 1 ):
-			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse , Exp.pr, Exp.emb1, Exp.ave = NLPModel.averageModel( Exp.datas.maxLen )
+			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse , Exp.pr, Exp.emb1, Exp.ave = NLPModel.averageModel( Exp.datas.maxLen, Exp.para )
 		elif( para.modelType == 2 ):
 			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr = NLPModel.rnnModel( Exp.datas.maxLen, Exp.para )
 		elif( para.modelType == 3):
@@ -47,7 +49,9 @@ class Exp:
 		elif( para.modelType == 4 ):
 			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr, Exp.st = NLPModel.gridRnnModel( Exp.datas.maxLen, Exp.para )
 		elif( para.modelType == 5 ):
-			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr, Exp.ac, Exp.w, Exp.f = NLPModel.selfAttentionRnnModel( Exp.datas.maxLen, Exp.para )
+			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse, Exp.outputs1, Exp.outputs2, Exp.pr = NLPModel.selfAttentionRnnModel( Exp.datas.maxLen, Exp.para )
+		elif( para.modelType == 6 ):
+			Exp.placehodlers, Exp.loss, Exp.prob, Exp.pred, Exp.prob_mse, Exp.mse,  Exp.pr, Exp.d = NLPModel.expModel( Exp.datas.maxLen, Exp.para )
 		
 	
 	# compute the spearman's rho
@@ -127,31 +131,44 @@ class Exp:
 				s1,s2, score, slen1, slen2, idx = Exp.datas.getValidSet( )
 				sc = np.reshape(score,(-1,1))
 				feedDatas = [s1, s2, sc, slen1, slen2 ]
-				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
+				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr, self.d['sent1_attention'], self.d['sent2_attention'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
+				#_loss, _prob, _y, _merged, _prob_mse, _mse, _pr = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
+				print 'valid loss: ' + str(_loss)
 				print 'valid loss: ' + str(_loss)
 				print 'prob_MSE ' + str( _prob_mse )
 				print '**** MSE: ' + str( _mse ) + '****'
 				print 'pearson_r: ' , _pr
 				print 'spearman_rho: ', self.__spearman_rho( _y, sc )			 
 
+				iid = random.randint(0,len(s1) )			
+				Exp.datas.displaySent( s1[iid] , slen1[iid])
+				Exp.datas.displaySent( s2[iid] , slen2[iid])
+
+				print 'attention perspective one:'				
+				print np.reshape( _a1[iid,:slen1[iid],0], newshape = [-1] )
+				print np.reshape( _a2[iid,:slen2[iid],0], newshape = [-1] )
+				#print 'another perspective:'
+				#print np.reshape( _a1[iid,:slen1[iid],1], newshape = [-1] )
+				#print np.reshape( _a2[iid,:slen2[iid],1], newshape = [-1] )
+
 				# we also examine on test set very time we save a model
 				s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet( )
 				sc = np.reshape(score,(-1,1))
 				feedDatas = [s1, s2, sc, slen1, slen2 ]
-				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _ac, _w, _f = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr, self.ac, self.w, self.f ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
+				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas ) } )
 
 				print 'test loss: ' + str(_loss)
 				print 'prob_MSE ' + str( _prob_mse )
 				print 'MSE: ' + str( _mse )
 				print 'pearson_r: ' , _pr
-				print 'spearman_rho: ', self.__spearman_rho( _y, sc )				
+				print 'spearman_rho: ', self.__spearman_rho( _y, sc )	
 				
 	
-				print 'slen1: %d, slen2: %d' % (slen1[1], slen2[1] )
-				max1 = np.max( slen1 )
-				print np.reshape( _ac[:,1,0], newshape = [ -1] )
-				print np.reshape( _w[:,1,1], newshape = [-1] )
-				print  _f[:2,0] 
+				#print 'slen1: %d, slen2: %d' % (slen1[1], slen2[1] )
+				#max1 = np.max( slen1 )
+				#print np.reshape( _ac[:,1,0], newshape = [ -1] )
+				#print np.reshape( _w[:,1,1], newshape = [-1] )
+				#print  _f[:2,0] 
 				#print _emb1[9,:,:1]
 				#print _ave[9,:1]				
 				#max1 = np.max( slen1 )

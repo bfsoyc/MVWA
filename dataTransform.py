@@ -117,6 +117,6 @@ oovFile.close()
 vocPath = outDir + '/vocb.txt'
 vocFile = open( vocPath, "w" )
 for word in vocbList:
-	vocFile.writelines( word + '\n' )
+	vocFile.writelines( word + '\t' +  str(vocb[word]) + '\n' )
 vocFile.close()
 

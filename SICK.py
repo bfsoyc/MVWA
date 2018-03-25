@@ -16,6 +16,7 @@ class SICKData():
 
 	def __init__( self  ):
 		self.nextIdx = 0
+		self.tokenMap = {}
 
 	def getNextBatch( self, batchSize ):
 		n = len( self.trainSet )
@@ -75,8 +76,24 @@ class SICKData():
 		for i in range(1,self.maxLen+1):
 			print '%d\t%d\t%.2f%%' %(i, cnt[i], 100.0*cnt[i]/n)
 		
-		
+	def loadVocb( self, path ):
+		file_to_read = open( path ,'r')
+		for line in file_to_read:
+			word, word_id = line.split('\t')
+			self.tokenMap[int(word_id)] = word
+		file_to_read.close()
 
+	def displaySent( self, sent, lens = None ):
+		if lens==None:
+			lens = range( len(sent) )
+		s = []
+		for token_id, itr in zip( sent, range(lens) ):
+			if self.tokenMap.has_key( token_id ):
+				s.append( self.tokenMap[token_id] )
+			else:
+				s.append( '<oov>' )
+		print ' '.join( s )
+				
 
 def loadData( dataPath, vocbSize = 2 ):
 	data = SICKData()	# a class to capsule all datas

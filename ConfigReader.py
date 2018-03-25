@@ -3,8 +3,6 @@ class Parameters:
 		# some paramters have to be initialized
 		self.TrainFlag = 0
 		self.PredictFlag = 0
-		self.KeyList = []
-		self.ValueList = []
 
 		inFile = open( config, 'r' )
 		for line in inFile:
@@ -49,10 +47,10 @@ class Parameters:
 				exec 'self.%s = %d' % (key, int(value) )
 			elif( key == 'attention_aspect' ):
 				exec 'self.%s = %d' % (key, int(value) )
+			elif( key == 'finalFeaSize' ):
+				exec 'self.%s = %d' % (key, int(value) )
 			else:
 				raise Exception("unrecognized parameter '%s' in configuration file"  % key)
-			self.KeyList.append( key )
-			self.ValueList.append( value )
 		inFile.close()
 
 		# set up some path
@@ -72,7 +70,9 @@ class Parameters:
 			modelName = '/gridRnn2D'
 		elif( self.modelType == 5 ):
 			modelName = '/selfAttentionRnn' 
-		
+		elif( self.modelType == 6 ):
+			modelName = '/expModel'
+
 		if( self.modelType == 2 or self.modelType==3 or self.modelType==4 or self.modelType == 5):
 			if( self.rnnCellType == 1 ):
 				extend = 'LSTM'
@@ -88,7 +88,8 @@ class Parameters:
 		self.modelLoadPath = self.modelSavePath + '-' + str( self.modelLoadVersion )
 
 	def printAll(self):
-		print '======================Train configuration===================== '
-		for key,value in zip( self.KeyList, self.ValueList ):
-			print '%s:\t%s ' % (key,value)
+		print '======================display configuration===================== '
+		for a in dir(self):
+			if not a.startswith('__') and not callable( getattr(self,a) ):
+				print '%s:\t%s' % (a, str(getattr(self,a)))
 

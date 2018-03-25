@@ -262,17 +262,19 @@ def selfAttentionRnnModel( maxLen , para ):
 	
 
 	def  _self_attention_rnn( cell, length, inputs ):
-		# the implement of dynamic_rnn:
-		# min_seq_length and max_seq_length is the minimum and maximum length of sequences within a batch 
-		# we loop over the time 
-		#	if( time <= min_seq_length ):
-		#		calculate the next state from previous state for all samples in the batchSize
-		# 		( just for the efficience of computation over batch? )		
-		#	else:
-		#		calculate the next state from previous state for all samples in the batchSize and set to zero_state for those which have done.  
-		#
-		# noted that we have deprecated using term 'state' and 'output' to represent the cell state and the cell hypothesis output
-		# now we use a tuple, named state, to capsule all these array:  state = tuple( h = output, c = cell_state )   
+		# this implement is different from the proposal self-attention paper
+		# in the proposal paper, H with size d-by-n is denoted as the dynamic length hidden state of the sentence
+		# attention weights is calculated by :
+		# a = softmax( S * tanh( W * H ) )
+		# in which W is of size k-by-d, S is of size 1-by-k. Thus the size of attention weights 'a' can be inferred as 1-by-n.
+		# usually k is a hyper parameter to tune.
+		# To construct a multi-view attention model, say p perspectives attention, just extend S to be a p-by-k matrix.
+		# Finally we will get an annotation matrix A, which is p-by-n.
+
+		# in this implement, we use the hypothesis outputs of the rnn cells to compute the attention weights, denoted as H'
+		# H' is derived from H: H' = f(H) = H .* output_gate(X)
+		# for simplicity, attention(annotation) matrix is calculated by:
+		# A = softmax( S * H' )   
 		min_seq_length = tf.reduce_min( length )
 		max_seq_length = tf.reduce_max( length )
 		input_shape = tf.shape(inputs)	# tf.shape() return a tf.Tensor
@@ -406,7 +408,86 @@ def selfAttentionRnnModel( maxLen , para ):
 
 	outputs1 = tf.constant(0,dtype=tf.int32)
 	outputs2 = tf.constant(0,dtype=tf.int32)	# useless
-	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, outputs1, outputs2, pearson_r, ac2, norm_w2, feas2[1]
+	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, outputs1, outputs2, pearson_r
+
+def expModel( maxLen , para ):
+	# pack all spec variable you want to verifiy in a dictionary
+	d = {}
+	hiddenSize = para.cellSize
+	
+	lens1 = tf.placeholder( dtype = tf.int32, shape = [None] )
+	lens2 = tf.placeholder( dtype = tf.int32, shape = [None] )
+	sent1 = tf.placeholder( dtype = tf.int32, shape = [None,maxLen] )
+	sent2 = tf.placeholder( dtype = tf.int32, shape = [None,maxLen] )
+	score = tf.placeholder( dtype = tf.float32, shape = [None, 1 ] )
+	
+	with tf.variable_scope( "embeddingLayer" ):
+		tf.get_variable_scope().reuse_variables()
+		embMat = tf.get_variable( "embedding" )
+	embeddingSize = embMat.get_shape().as_list()[1]
+	wordEmb1 = tf.nn.embedding_lookup( embMat, sent1 )
+	wordEmb2 = tf.nn.embedding_lookup( embMat, sent2 )
+		
+	cell_forward = tf.contrib.rnn.BasicLSTMCell( hiddenSize , forget_bias = para.forgetBias)
+	cell_backward = tf.contrib.rnn.BasicLSTMCell( hiddenSize , forget_bias = para.forgetBias)
+
+	outputs1, _ = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb1, sequence_length = lens1 , dtype=tf.float32)
+	outputs2, _ = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb2, sequence_length = lens2 , dtype=tf.float32)
+
+	h1 = tf.concat( outputs1, axis = -1 )
+	h2 = tf.concat( outputs2, axis = -1 )
+
+	# create attention transform weights
+	middlePara = 64
+	with tf.variable_scope( 'attention_matrix' ):
+		attention_W = tf.get_variable( 'translation_weight', initializer = tf.truncated_normal( shape =  [2*hiddenSize, middlePara], stddev = 0.1 ) )
+		attention_S = tf.get_variable( 'combination_weight', initializer = tf.truncated_normal( shape =  [middlePara, para.attention_aspect], stddev = 0.1 ) )  
+
+	def getSentenceEmb( H, a_W , a_S, wordEmb , name = None ):
+		batchSize = tf.shape(H)[0]
+		ext_W = tf.tile( tf.expand_dims( a_W, axis = 0 ), multiples = [batchSize,1,1] )
+		HW = tf.tanh( tf.matmul( H, ext_W ) )
+		ext_S = tf.tile( tf.expand_dims( a_S, axis = 0 ), multiples = [batchSize,1,1] )
+		unnorm_A = tf.matmul( HW, ext_S )
+		annotation = tf.nn.softmax( unnorm_A, axis = 1 )
+		
+		d[name+'_attention'] = annotation 	# debug usage
+
+		weighted_H = tf.tile( tf.expand_dims ( wordEmb, axis = -1 ), multiples = [1,1,1,para.attention_aspect] ) * tf.tile( tf.expand_dims( annotation,axis = 2), multiples=[1,1,embeddingSize,1] )
+		sentEmb = tf.reduce_sum( weighted_H, axis = 1 )
+ 		return tf.unstack( sentEmb, axis = -1 ) 	# return a list where each element is a tensor of size [batchSize, word_embeddingSize], representing one aspect of the attention
+	
+	feas1 = getSentenceEmb( h1, attention_W, attention_S, wordEmb1 , 'sent1' )
+	feas2 = getSentenceEmb( h2, attention_W, attention_S, wordEmb2 , 'sent2')
+	
+	if( para.similarityMetric == 1 ):
+		# In "softmax" metric, we use the final state of LSTM to predict the distribution of similarity 	
+		feaVec = __feaTransform( feas1, feas2, outputSize = para.finalFeaSize )
+
+		# softmax layer
+		prob, logits = __softmaxLayer( feaVec, labelCnt = 5 )
+
+		r = tf.constant( range(1,6), shape = [5,1] , dtype = tf.float32 )
+		y =  tf.matmul( prob, r ) 
+		label = __scoreLabel2p( score )	
+		
+		wPenalty = __applyL2Norm()
+		#-------------------
+		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty
+		pearson_r = __pearson_r( y, score )
+
+		# add summary for tensorboard visulization
+		prob_mse = tf.reduce_mean(   tf.reduce_sum( (prob-label)**2 , axis = 1) )	
+		mse = tf.reduce_mean( tf.square(y - score) )
+		tf.summary.scalar( 'probability_MSE' , prob_mse )
+		tf.summary.scalar( 'similarity_MSE' , mse )
+		tf.summary.scalar( 'pearson_r', pearson_r )
+		tf.summary.scalar( 'loss' , loss )
+
+
+	
+
+	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, pearson_r, d
 
 def gridRnnModel( maxLen , para ):
 	hiddenSize = para.cellSize
@@ -567,10 +648,8 @@ def gridRnnModel( maxLen , para ):
 	
 	if( para.similarityMetric == 1 ):
 		# softmax layer
-		w = tf.get_variable( 'softmax_weight', initializer = tf.truncated_normal( shape =  [hiddenSize*2, 5], stddev = 0.1 ) )	# in this case, feature vector is twice of hiddenSize
-		b = tf.get_variable( 'softmax_bias' , initializer = tf.truncated_normal( shape =  [5], stddev = 0.1 ) )
-		logits = tf.matmul( feaVec, w ) + b 
-		prob = tf.nn.softmax( logits )
+		prob, logits = __softmaxLayer( feaVec, labelCnt = 5 )
+
 
 		r = tf.constant( range(1,6), shape = [5,1] , dtype = tf.float32 )
 		y =  tf.matmul( prob, r ) 
@@ -615,8 +694,8 @@ def gridRnnModel( maxLen , para ):
 	outputs2 = tf.constant(0,dtype=tf.int32)	# useless
 	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, outputs1, outputs2, pearson_r, h_ta
 
-def averageModel( maxLen  ):		
-	hiddenSize = 150;	
+def averageModel( maxLen , para ):		
+	
 
 	lens1 = tf.placeholder( dtype = tf.float32, shape = [None] )
 	lens2 = tf.placeholder( dtype = tf.float32, shape = [None] )
@@ -637,14 +716,10 @@ def averageModel( maxLen  ):
 	with tf.name_scope( 'sentence2' ):
 		feas2 = __extractFeaVec( wordEmb2, lens2 )
 
-
-	feaVec, w_a, w_d = __feaTransform( feas1, feas2, hiddenSize )
-	
+	feaVec = __feaTransform_v2( feas1, feas2, para.finalFeaSize )	
+ 
 	# softmax layer
-	w = tf.get_variable( 'softmax_weight', initializer = tf.truncated_normal( shape =  [hiddenSize, 5], stddev = 0.1 ) )
-	b = tf.get_variable( 'softmax_bias' , initializer = tf.truncated_normal( shape =  [5], stddev = 0.1 ) )
-	logits = tf.matmul( feaVec, w ) + b 
-	prob = tf.nn.softmax( logits )
+	prob, logits = __softmaxLayer( feaVec, 5 )
 	r = tf.constant( range(1,6), shape = [5,1] , dtype = tf.float32 )
 	y =  tf.matmul( prob, r ) 
 	prob_mse = tf.reduce_mean(   tf.reduce_sum( (prob-label)**2 , axis = 1) )	
@@ -653,7 +728,7 @@ def averageModel( maxLen  ):
 	pearson_r = __pearson_r( y, score )
 
 	L2Strength = 1e-2	# L2 regulariztion strength
-	wPenalty = L2Strength * ( tf.reduce_sum( tf.square( w )) + tf.reduce_sum( tf.square(w_a) ) + tf.reduce_sum( tf.square(w_d)) )	# weight decay penalty
+	wPenalty = __applyL2Norm( L2Strength )
 	loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty
 
 	# add summary for tensorboard visulization
@@ -665,9 +740,17 @@ def averageModel( maxLen  ):
 	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, pearson_r , wordEmb1, feas1[0]
 
 def __getWb( shape , tensorName ):
-	w = tf.get_variable( tensorName + '_weight', initializer = tf. truncated_normal( shape = shape, stddev = 0.1 ) )
-	b = tf.get_variable( tensorName + '_bias' , initializer = tf. truncated_normal( [ shape[1] ] , stddev = 0.1 ) )
+	w = tf.get_variable( tensorName + '_weight_norm', initializer = tf. truncated_normal( shape = shape, stddev = 0.1 ) )
+	b = tf.get_variable( tensorName + '_bias_norm' , initializer = tf. truncated_normal( [ shape[1] ] , stddev = 0.1 ) )
 	return w,b
+
+def __softmaxLayer( feaVec , labelCnt ):
+	# labelCnt : the number of categories in spec dataset
+	feaSize = feaVec.get_shape().as_list()[1]
+	w,b = __getWb( shape = [feaSize, labelCnt] , tensorName = 'softmax')
+	logits = tf.matmul( feaVec, w ) + b 
+	prob = tf.nn.softmax( logits )
+	return prob, logits
 
 def __extractFeaVec( wordEmb , lens):
 	lens = tf.cast( lens, tf.float32 )	
@@ -679,13 +762,10 @@ def __extractFeaVec( wordEmb , lens):
 	batchSize,embeddingSize = sumpool.get_shape().as_list()
 	# scaling sum_pooling to get mean-pooling in the sense of length normalization
 	factor = tf.tile( tf.expand_dims( 1/lens, 1 )	, multiples = [1,embeddingSize] )
-	print '#############'	
-	print factor.get_shape()
-	print sumpool.get_shape()
 	ave = tf.multiply( factor, sumpool , name = 'length_specified_mean_pooling')
 	
-	#return [ave, maxpool, minpool ]
-	return [maxpool,minpool]
+	return [ave, maxpool, minpool ]
+	#return [maxpool,minpool]
 	
 def __feaTransform( feas1, feas2, outputSize ):
 	feas_a = []	
@@ -704,7 +784,28 @@ def __feaTransform( feas1, feas2, outputSize ):
 	w_d = tf.get_variable( 'distFea' + '_weight', initializer = tf. truncated_normal( shape = [srcFeaSize*feasCnt,outputSize], stddev = 0.1 ) )
 	b_s = tf.get_variable( 'hs' + '_bias', initializer = tf. truncated_normal( shape = [outputSize], stddev = 0.1 ) )
 	feaVec = tf.sigmoid( tf.matmul( H_angle, w_a ) + tf.matmul( H_dist, w_d ) + b_s , name = 'feature_vector')	
-	return feaVec, w_a, w_d
+	return feaVec
+
+def __feaTransform_v2( feas1, feas2, outputSize ):
+	# version 1 of this function discard the original feature, but we think that will lose some information
+	# all original feature vector will be reserve in version 2
+	feas_a = []	
+	feas_d = []
+	for fea1,fea2 in zip( feas1, feas2 ):		
+		h_angle = tf.multiply( fea1, fea2 )	# get angle feature
+		h_dist = tf.abs( fea1-fea2 )		# get distance feature
+		feas_a.append( h_angle )
+		feas_d.append( h_dist )
+
+	H = tf.concat( feas_a + feas_d + feas1 + feas2, axis = 1, name = 'concat_features' )
+	feaSize = H.get_shape().as_list()[1]
+	print 'feature size before and after compress:\t%d\t%d' % ( feaSize, outputSize )
+
+	W, b = __getWb( shape = [feaSize, outputSize], tensorName = 'feaTransform')
+	#W = tf.get_variable( 'feaTransform_weight', initializer = tf.truncated_normal( shape = [feaSize, outputSize ], stddev = 0.1 ) )
+	#b = tf.get_variable( 'feaTransform_bias', initializer = tf.truncated_normal( shape = [outputSize], stddev = 0.1 ) )
+	feaVec = tf.sigmoid( tf.matmul( H, W ) + b )
+	return feaVec	
 
 # score label to a sparse target distribution p	, this implement takes Tensor as input and return a Tensor
 def __scoreLabel2p( score ):
@@ -753,8 +854,19 @@ def __pearson_r( X, Y ):
 # apply L2 regularization on trainable variables
 def __applyL2Norm( L2Strength = 3e-4):
 	ls = tf.trainable_variables()
-	print 'variable to be regulized:'
+	regu_ls = []
+	non_regu_ls = []
 	for ts in ls:
+		if( ts.name.find('norm')==-1  ):
+			non_regu_ls.append(ts)
+		else:
+			regu_ls.append(ts)
+
+	print 'variable to be regulized:'
+	for ts in regu_ls:
 		print ts.name
-	wPenalty = tf.contrib.layers.apply_regularization( regularizer = tf.contrib.layers.l2_regularizer(L2Strength) , weights_list = ls )
+	print 'trainable variable but not add to L2-loss:'
+	for ts in non_regu_ls:
+		print ts.name
+	wPenalty = tf.contrib.layers.apply_regularization( regularizer = tf.contrib.layers.l2_regularizer(L2Strength) , weights_list = regu_ls )
 	return wPenalty
