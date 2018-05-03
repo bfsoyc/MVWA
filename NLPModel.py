@@ -431,16 +431,32 @@ def expModel( maxLen , para ):
 	cell_forward = tf.contrib.rnn.BasicLSTMCell( hiddenSize , forget_bias = para.forgetBias)
 	cell_backward = tf.contrib.rnn.BasicLSTMCell( hiddenSize , forget_bias = para.forgetBias)
 
-	outputs1, _ = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb1, sequence_length = lens1 , dtype=tf.float32)
-	outputs2, _ = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb2, sequence_length = lens2 , dtype=tf.float32)
+	outputs1, lastState1 = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb1, sequence_length = lens1 , dtype=tf.float32)
+	outputs2, lastState2 = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb2, sequence_length = lens2 , dtype=tf.float32)
 
-	h1 = tf.concat( outputs1, axis = -1 )
-	h2 = tf.concat( outputs2, axis = -1 )
+	#outputs1, _ = tf.nn.dynamic_rnn( cell = cell_forward, inputs = wordEmb1, sequence_length = lens1, dtype=tf.float32 )
+	#outputs2, _ = tf.nn.dynamic_rnn( cell = cell_forward, inputs = wordEmb2, sequence_length = lens2, dtype=tf.float32 )
+
+	# get the state of the whole sentence
+	def getTileFinalOutput( outputs, lastState ):
+		T = outputs[0].get_shape().as_list()[1]
+		tileFinalOutput_fw = tf.tile( tf.expand_dims( lastState[0].h, axis = 1 ), multiples = [1, T , 1] )
+		tileFinalOutput_bw = tf.tile( tf.expand_dims( outputs[1][:,0,:], axis = 1 ), multiples = [1, T , 1] )
+		#return ( tileFinalOutput_fw, tileFinalOutput_bw )
+		return ( tileFinalOutput_fw, )
+
+	if not isinstance(outputs1,tuple):
+		outputs1 = [outputs1]
+		outputs2 = [outputs2]	
+
+	h1 = tf.concat( outputs1 + getTileFinalOutput( outputs2, lastState2 ), axis = -1 )		# combine feature and explore the interactive info
+	h2 = tf.concat( outputs2 + getTileFinalOutput( outputs1, lastState1 ), axis = -1 )
 
 	# create attention transform weights
-	middlePara = 64
+	middlePara = para.hiddenSize
+	hiddenSize = h1.get_shape().as_list()[2]
 	with tf.variable_scope( 'attention_matrix' ):
-		attention_W = tf.get_variable( 'translation_weight', initializer = tf.truncated_normal( shape =  [2*hiddenSize, middlePara], stddev = 0.1 ) )
+		attention_W = tf.get_variable( 'translation_weight', initializer = tf.truncated_normal( shape =  [hiddenSize, middlePara], stddev = 0.1 ) )
 		attention_S = tf.get_variable( 'combination_weight', initializer = tf.truncated_normal( shape =  [middlePara, para.attention_aspect], stddev = 0.1 ) )  
 
 	def getSentenceEmb( H, a_W , a_S, wordEmb , name = None ):
@@ -449,45 +465,74 @@ def expModel( maxLen , para ):
 		HW = tf.tanh( tf.matmul( H, ext_W ) )
 		ext_S = tf.tile( tf.expand_dims( a_S, axis = 0 ), multiples = [batchSize,1,1] )
 		unnorm_A = tf.matmul( HW, ext_S )
-		annotation = tf.nn.softmax( unnorm_A, axis = 1 )
-		
+		annotation = tf.nn.softmax( unnorm_A, axis = 1 )	# [batchSize, max_len, attention_aspect]
+		# a matrix's frobenius norm is equal to the square root of the summation of the square value of all elements. 
+		'''
+		A_loss = tf.reduce_mean(  tf.reduce_sum (tf.reduce_sum( tf.square (
+			tf.matmul( tf.transpose( annotation, perm = [0,2,1] ), annotation ) - 
+			tf.ones( shape = [para.attention_aspect, para.attention_aspect] , dtype=tf.float32 ) 
+		), axis=-1), axis=-1) );		# broadcasting apply to identity matrix.
+		'''
+		A_loss = tf.constant([0])
+
 		d[name+'_attention'] = annotation 	# debug usage
 
 		weighted_H = tf.tile( tf.expand_dims ( wordEmb, axis = -1 ), multiples = [1,1,1,para.attention_aspect] ) * tf.tile( tf.expand_dims( annotation,axis = 2), multiples=[1,1,embeddingSize,1] )
 		sentEmb = tf.reduce_sum( weighted_H, axis = 1 )
- 		return tf.unstack( sentEmb, axis = -1 ) 	# return a list where each element is a tensor of size [batchSize, word_embeddingSize], representing one aspect of the attention
+ 		return tf.unstack( sentEmb, axis = -1 ) , A_loss	# return a list where each element is a tensor of size [batchSize, word_embeddingSize], representing one aspect of the attention
 	
-	feas1 = getSentenceEmb( h1, attention_W, attention_S, wordEmb1 , 'sent1' )
-	feas2 = getSentenceEmb( h2, attention_W, attention_S, wordEmb2 , 'sent2')
+	feas1, a_loss1 = getSentenceEmb( h1, attention_W, attention_S, wordEmb1 , 'sent1' )
+	feas2, a_loss2 = getSentenceEmb( h2, attention_W, attention_S, wordEmb2 , 'sent2')
 	
-	if( para.similarityMetric == 1 ):
-		# In "softmax" metric, we use the final state of LSTM to predict the distribution of similarity 	
+	# the last softmax layer is depended on the downstream application
+	if( para.dataset == 'SICK' ):
 		feaVec = __feaTransform( feas1, feas2, outputSize = para.finalFeaSize )
 
 		# softmax layer
 		prob, logits = __softmaxLayer( feaVec, labelCnt = 5 )
-
+		d['prob'] = prob
 		r = tf.constant( range(1,6), shape = [5,1] , dtype = tf.float32 )
 		y =  tf.matmul( prob, r ) 
+		d['y'] = y
 		label = __scoreLabel2p( score )	
 		
 		wPenalty = __applyL2Norm()
 		#-------------------
-		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty
-		pearson_r = __pearson_r( y, score )
+		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty		
+		if( para.use_annotation_orthgonal_loss==1 ):
+			penalty_strength = 4e-4;
+			loss = loss + penalty_strength * (a_loss1 + a_loss2);
+		d['loss'] = loss
 
+		pearson_r = __pearson_r( y, score )
+		d['pearson_r'] = pearson_r
 		# add summary for tensorboard visulization
 		prob_mse = tf.reduce_mean(   tf.reduce_sum( (prob-label)**2 , axis = 1) )	
+		d['prob_mse'] = prob_mse
 		mse = tf.reduce_mean( tf.square(y - score) )
+		d['mse'] = mse
 		tf.summary.scalar( 'probability_MSE' , prob_mse )
 		tf.summary.scalar( 'similarity_MSE' , mse )
 		tf.summary.scalar( 'pearson_r', pearson_r )
 		tf.summary.scalar( 'loss' , loss )
 
+	elif ( para.dataset == 'WikiQA' ):
+		feaVec = __feaTransform( feas1, feas2, outputSize = para.finalFeaSize )
+		# softmax layer
+		prob, logits = __softmaxLayer( feaVec, labelCnt = 2 )
+		prob_of_positive = prob[:,1]
+		d['prob_of_positive'] = prob_of_positive
+		label = tf.squeeze(tf.one_hot(indices = tf.cast(score, dtype = tf.int32) , depth = 2, on_value = 1.0, off_value = 0, name = 'one_hot_label'))
+		wPenalty = __applyL2Norm()
+		#-------------------
+		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty
 
-	
+		# add summary for tensorboard visulization
+		prob_mse = tf.reduce_mean(   tf.reduce_sum( (prob-label)**2 , axis = 1) )	
+		d['prob_mse'] = prob_mse
 
-	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, pearson_r, d
+	placehodlers = [sent1, sent2, score, lens1, lens2]
+	return placehodlers, d
 
 def gridRnnModel( maxLen , para ):
 	hiddenSize = para.cellSize

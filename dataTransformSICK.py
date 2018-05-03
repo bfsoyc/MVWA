@@ -47,7 +47,7 @@ def sentenceNorm( sent ):
 	s = ''
 	for i in range(l):
 		if( sent[i]=='\'' or sent[i]=='\\' or sent[i]=='/' ):
-			if( i+1 < len and sent[i+1]!=' '):
+			if( i+1 < l and sent[i+1]!=' '):
 				s = s + ' '
 		elif( sent[i]==',' or sent[i]=='.' ):
 			continue

@@ -2,8 +2,7 @@ import random
 import math
 import numpy as np
 
-class SICKData():
-	# static variable, shared by all object of this class	
+class WikiQAData():
 	rawDataA = []
 	slenA = []		# sentence length
 	rawDataB = []
@@ -11,7 +10,10 @@ class SICKData():
 	rawLabel = []	
 	trainSet = []
 	validSet = []
-	testSet = []	
+	testSet = []
+	# costume parameter for WikiQA
+	candidateGroup = {}
+	questionId = []	
 	maxLen = 0
 
 	def __init__( self  ):
@@ -63,34 +65,7 @@ class SICKData():
 		print 'training set get shuffled@@@@@@@@@@@@@@@@@@@@@@@@@@@@epoch:\t %d' % self.epoch
 
 	def printInfo(self):
-		print 'train set:\t', len( self.trainSet )
-		print 'valid set:\t', len( self.validSet )
-		print 'test set:\t' , len( self.testSet )
-		# statistic
-		cnt = [0 for i in range(self.maxLen+1)]
-		for l in self.slenA:
-			cnt[l] = cnt[l]+1
-		for l in self.slenB:
-			cnt[l] = cnt[l]+1
-
-		n = len( self.slenA )*2
-		if n != np.sum(cnt):
-			print 'n = %d ,  total count = %d, some bad sentences' % (n, np.sum(cnt) )
-
-		# we quantize the float score into integer ranged from 2 to 9
-		score_cnt = [0 for i in range( 12 ) ]
-		for s in self.rawLabel:
-			idx = min( 9, int( np.floor( s*2 ) ) )
-			score_cnt[idx] = score_cnt[idx]+1
-
-		print '======================SICK statistic====================='
-		print 'length\tcount\tpercentage'		
-		for i in range(1,self.maxLen+1):
-			print '%d\t%d\t%.2f%%' %(i, cnt[i], 100.0*cnt[i]/n)
-
-		print 'score_range\tcount\tpercentage'		
-		for i in range(2,10):
-			print '[%.1f,%.1f%s\t%d\t%.2f%%' % ( i/2.0, i/2.0+0.5, ']' if i==9 else ')', score_cnt[i], 100.0*score_cnt[i]/n*2 )
+		pass
 
 	def loadVocb( self, path ):
 		file_to_read = open( path ,'r')
@@ -110,71 +85,85 @@ class SICKData():
 				s.append( '<oov>' )
 		print ' '.join( s )
 		return s
-				
+	
+	def evaluateOn(self, predict, dataset):
+		if not dataset in ['dev','test']:
+			raise Exception('argument dataset must be either \'dev\' or \'test\'')	
+		if len(y) != len(self.validSet):
+			raise Exception('length of predict is inconsistent with loaded dev dataset')		
+		
+		if (dataset == 'dev'):
+			offset = min(self.validSet)
+		else:
+			offset = min(self.testSet)
 
-def loadData( dataPath, vocbSize = 2 ):
-	data = SICKData()	# a class to capsule all datas
+		mrr = 0
+		for group in self.candidateGroup[dataset]:
+			pred = [predict[i-offset] for i in  group]
+			idx = sorted( range(len(pred)), key = lambda k:pred[k])
+			# find the first answer with score 1
+			r = next( x for x in range(len(idx)) if int(self.rawLabel[group[idx[x]]]) == 1 )
+			mrr = mrr + 1/(r+1)
 
-	inFile = open( dataPath, "r" )
-	maxLen = 0	# maximum length of sentences
-	for line in inFile:
-		items = line.split('\t')
-		data.rawLabel.append(float(items[2]))
-		sentA = []
-		for token in items[0].split(' '):
-			sentA.append( int(token) )
-		sentB = []
-		for token in items[1].split(' '):
-			sentB.append( int(token) )
-		data.rawDataA.append( sentA )
-		data.slenA.append( len(sentA) )
-		data.rawDataB.append( sentB )
-		data.slenB.append( len(sentB) )
-		maxLen = max( max( maxLen, len(sentA) ),  len(sentB) )
+		mrr = mrr / len(self.candidateGroup[dataset])
+		return mrr			
+		
 
-	# adjust each sentence to same length by appeding end symbol to the end
-	# token 'vocbSize-1' represents for the end symbol of sequences, whose word vector is vector of zeros. 
-	data.rawDataA = [ sent + [vocbSize-1]*(maxLen-len(sent)) for sent in data.rawDataA ]
-	data.rawDataB = [ sent + [vocbSize-1]*(maxLen-len(sent)) for sent in data.rawDataB ]
-	data.maxLen = maxLen
+def loadData( dataPathPrefix, vocbSize = 2, select = 'ALL' ):
+	data = WikiQAData()	# a class to capsule all datas
+	dataset = {'ALL':['train','dev','test'], 'TRAIN':['train'], 'DEV':['dev'], 'TEST':['test'] }[select]
+	
+	for subset in dataset:
+		inFilePath = dataPathPrefix + subset + '.txt'
+		inFile = open( inFilePath, "r")
+		#refPath = refPathPrefix + subset+ '.txt'
+		#refFile = open( refPath, "r")
 
-	samplesCnt = len(data.rawLabel)
-	rk = range( samplesCnt )
+		candidates = {}
+		maxLen = 0	# maximum length of sentences
+		bgIdx = len(data.rawLabel)
+		for cnt, line in enumerate(inFile):
+			items = line.split('\t')			# items = [sentA \t sentB \t score \t question_id]
+			data.rawLabel.append(float(items[2]))
+			q_id = int(items[3])
+			data.questionId.append(q_id)
+			candiates.setdefault(q_id, []).append(cnt)
+			sentA = []
+			for token in items[0].split(' '):
+				sentA.append( int(token) )
+			sentB = []
+			for token in items[1].split(' '):
+				sentB.append( int(token) )
+			data.rawDataA.append( sentA )
+			data.slenA.append( len(sentA) )
+			data.rawDataB.append( sentB )
+			data.slenB.append( len(sentB) )
+			maxLen = max( max( maxLen, len(sentA) ),  len(sentB) )
+			
+		inFile.close()
+
+		edIdx = len(data.rawLabel)
+		# adjust each sentence to same length by appeding end symbol to the end
+		# token 'vocbSize-1' represents for the end symbol of sequences, whose word vector is vector of zeros. 
+		data.rawDataA[bgIdx:edIdx] = [ sent + [vocbSize-1]*(maxLen-len(sent)) for sent in data.rawDataA[bgIdx:edIdx] ]
+		data.rawDataB[bgIdx:edIdx] = [ sent + [vocbSize-1]*(maxLen-len(sent)) for sent in data.rawDataB[bgIdx:edIdx] ]
+		data.maxLen = maxLen
+		
+
+		if (subset == 'train'):
+			data.trainSet = range(bgIdx, edIdx)
+			data.candidateGroup['train'] = candidates
+		elif (subset == 'dev'):
+			data.validSet = range(bgIdx, edIdx)
+			data.candidateGroup['dev'] = candidates
+		elif (subset == 'test'):
+			data.testSet == range(bgIdx, edIdx)
+			data.candidateGroup['test'] = candidates
+
+		
 
 	random.seed( 5233 ) # fixed random seed 520
-	random.shuffle( rk )
-
-	
-	# split dataset
-	tr = 4500 # around 9/20 * samplesCnt
-	va = 500
-	#ts = 4927
-	data.trainSet = rk[0:tr]
-	data.validSet = rk[tr:tr+va]
-	data.testSet = rk[tr+va:]
+	random.shuffle( data.trainSet )
 	
 	data.printInfo()
 	return data
-
-# score label to a sparse target distribution p	
-def scoreLabel2p( score ):
-	'''
-	the relatedness score is range from 1 to 5, for a certian score
-	p[i] = score - floor(score),			for i = floor(score)+1
-	     = floor(score) + 1 - score, 		for i = floor(score)
-	     = 0								otherwise
-	e.g 
-		score = 4.2 corresponds to the following polynomial distribution
-
-						| x=1 | x=2 | x=3 | x=4 | x=5 |
-						+-----+-----+-----+-----+-----+	
-	probabilty of p(x) 	|  0  |  0  |  0  | 0.8 | 0.2 |
-	'''
-	P = np.zeros( [ len( score ), 5 ] )
-	for idx,s in enumerate(score):
-		i = int( math.floor(s) ) + 1
-		if i <= 5:		# deal with corner case i==6
-			P[idx][i-1] = s - math.floor(s)	
-		P[idx][i-2] = 1 - (s - math.floor(s))
-	return P
-	
