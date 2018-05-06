@@ -1,6 +1,34 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# compute the average precision(AP) for the given rank list
+# relevant is a binary mask where entity with value 1 represent a positive sample
+# AP:= summation{ precision(k)*(recall(k)-recall(k-1)) | k = 1,2,3... }
+def computeAP( score, relevant ):
+	assert isinstance(relevant[0], int)
+	idx = sorted(range(len(score)), key = lambda k:score[k], reverse = True)
+	hit = 0.0
+	AP = 0.0
+	for k,i in enumerate(idx):
+		if (relevant[i] == 1):
+			hit += 1
+			precision_at_k = hit/(k+1)
+			AP += precision_at_k
+	AP /= sum(relevant)
+	return AP
+
+# compute the reciprocal rank(RR) for the given rank list
+# relevant is a binary mask where entity with value 1 represent a positive sample
+def computeRR(score, relevant):
+	assert isinstance(relevant[0], int)
+	idx = sorted(range(len(score)), key = lambda k:score[k], reverse = True)
+	try:
+		r = next( x for x in range(len(idx)) if relevant[idx[x]] == 1 )	# find the first answer with score 1
+	except StopIteration:
+		'Invalid argument: relevant. No entity in relevant is one'
+	RR = 1.0/(r+1)
+	return RR
+
 def spearman_rho( predict, label, approximate = False ):
 	if (approximate):
 		# use the pupular formula

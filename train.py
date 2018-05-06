@@ -26,19 +26,22 @@ class Exp:
 	def __init__( self, para):
 		Exp.para = para
 		
-		dataDir = '../data/expCorpus'
+		embDir = '../data/expCorpus'
 			
 		# load embedding matrix
 		d = para.embeddingSize
-		emb = np.fromfile( dataDir+'/embMat' + str(d) + '.bin', dtype = np.float32)
+		emb = np.fromfile( embDir+'/embMat' + str(d) + '.bin', dtype = np.float32)
 		emb.shape = -1,d
 
 		# load data
 		if (para.dataset == 'SICK'):
-			Exp.datas = SICK.loadData( dataDir + '/inputs.txt', emb.shape[0])
+			dataPath = '../data/expCorpus/inputs.txt'
+			Exp.datas = SICK.loadData(dataPath, emb.shape[0])
 		elif (para.dataset == 'WikiQA'):
-			Exp.datas = WikiQA.loadData( dataDir + '/inputs.txt', emb.shape[0])
-		Exp.datas.loadVocb( dataDir + '/vocb.txt')
+			dataPathPrefix = '../data/expQACorpus/'
+			Exp.datas = WikiQA.loadData(dataPathPrefix, emb.shape[0])
+			Exp.datas.truncate( len_limit = para.sentenceTruncate )
+		Exp.datas.loadVocb( embDir + '/vocb.txt')
 
 		
 
@@ -62,8 +65,6 @@ class Exp:
 	def train(self):
 		with tf.name_scope( 'train'):
 			#train_step = tf.train.AdagradOptimizer( learning_rate = learningRate).minimize( loss)
-			for key in self.tensorDict:
-				print key
 			train_step = tf.train.AdamOptimizer( self.para.learningRate ).minimize( self.tensorDict['loss'])
 
 		saveVar = tf.get_collection( tf.GraphKeys.TRAINABLE_VARIABLES)	
@@ -110,7 +111,7 @@ class Exp:
 
 				iid = random.randint(0,len(s1))
 				'''			
-				Exp.datas.displaySent( s1[iid] , slen1[iid])
+				Exp.datas.displaySent( s1[iid] , slen1[iid])	# TODO: what if slen1 is not set
 				Exp.datas.displaySent( s2[iid] , slen2[iid])
 
 				print 'attention perspective one:'				
@@ -138,10 +139,27 @@ class Exp:
 				s1,s2, score, slen1, slen2, idx = Exp.datas.getValidSet()
 				sc = np.reshape(score,(-1,1))
 				feedDatas = [s1, s2, sc, slen1, slen2 ]
-				
 				_loss, _prob_pos, _merged = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'], merged ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
-				print 'valid mrr:\t%f' % Exp.datas.evaluateOn(_prob_pos, 'dev')
+				'''
+				for idx in range(30):
+					Exp.datas.displaySent( s1[idx], slen1[idx] )
+					Exp.datas.displaySent( s2[idx], slen2[idx] )
+					print 'ground true:\t%d, pred:\t%f' % (score[idx],_prob_pos[idx])
+				'''
+				MRR, MAP = Exp.datas.evaluateOn(_prob_pos, 'dev')
+				print 'test loss:\t%f' % _loss
+				print 'test mrr:\t%f' % MRR
+				print 'test map:\t%f' % MAP
 
+				# test set
+				s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet()
+				sc = np.reshape(score,(-1,1))
+				feedDatas = [s1, s2, sc, slen1, slen2 ]
+				_loss, _prob_pos, _merged = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'], merged ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
+				MRR, MAP = Exp.datas.evaluateOn(_prob_pos, 'test')
+				print 'test loss:\t%f' % _loss
+				print 'test mrr:\t%f' % MRR
+				print 'test map:\t%f' % MAP
 
 			# save log
 			writer.add_run_metadata( tf.RunMetadata() , 'itr:%d' % i)
@@ -166,28 +184,47 @@ class Exp:
 		saver.restore( sess , path)
 
 		# test set
-		s1,s2, score, slen1, slen2,idx = Exp.datas.getTestSet()
-		sc = np.reshape(score,(-1,1))
-		feedDatas = [s1, s2, sc, slen1, slen2 ]
-		_loss, _prob, _y, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.loss, self.prob, self.pred, self.prob_mse, self.mse, self.pr, self.d['sent1_attention'], self.d['sent2_attention']], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
+		if (self.para.dataset == 'SICK'):
+			s1,s2, score, slen1, slen2,idx = Exp.datas.getTestSet()
+			sc = np.reshape(score,(-1,1))
+			feedDatas = [s1, s2, sc, slen1, slen2 ]
+			_loss, _prob, _y, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.loss, self.prob, self.pred, self.prob_mse, self.mse, self.pr, self.d['sent1_attention'], self.d['sent2_attention']], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
 
-		print '=======================test phase=================================='
-		self.datas.printInfo()
-		print 'test loss:\t' + str(_loss)
-		print 'prob_MSE:\t' + str( _prob_mse)
-		print 'MSE:\t' + str( _mse)
-		print 'pearson_r:\t' , _pr
-		print 'spearman_rho:\t', utils.spearman_rho( _y, sc)
+			print '=======================test phase=================================='
+			self.datas.printInfo()
+			print 'test loss:\t' + str(_loss)
+			print 'prob_MSE:\t' + str( _prob_mse)
+			print 'MSE:\t' + str( _mse)
+			print 'pearson_r:\t' , _pr
+			print 'spearman_rho:\t', utils.spearman_rho( _y, sc)
 		
-		if (self.para.modelType == 6):
-			# inspect the annotation matrix
-			for i in range(50):
-				iid = random.randint(0,len(s1))
-				sent1 = Exp.datas.displaySent( s1[iid] , slen1[iid])
-				sent2 = Exp.datas.displaySent( s2[iid] , slen2[iid])
-				annotation1 = np.squeeze( np.transpose(_a1[iid,:slen1[iid],:]))
-				annotation2 = np.squeeze( np.transpose(_a2[iid,:slen2[iid],:]))
-				utils.displayAttentionMat( sent1, annotation1, sent2, annotation2)
+			if (self.para.modelType == 6):
+				# inspect the annotation matrix
+				for i in range(50):
+					iid = random.randint(0,len(s1))
+					sent1 = Exp.datas.displaySent( s1[iid] , slen1[iid])
+					sent2 = Exp.datas.displaySent( s2[iid] , slen2[iid])
+					annotation1 = np.squeeze( np.transpose(_a1[iid,:slen1[iid],:]))
+					annotation2 = np.squeeze( np.transpose(_a2[iid,:slen2[iid],:]))
+					utils.displayAttentionMat( sent1, annotation1, sent2, annotation2)
+
+		elif (self.para.dataset == 'WikiQA'):
+			# test set
+			s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet()
+			sc = np.reshape(score,(-1,1))
+			feedDatas = [s1, s2, sc, slen1, slen2 ]
+			_loss, _prob_pos = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
+			MRR, MAP = Exp.datas.evaluateOn(_prob_pos, 'test')
+			print 'test loss:\t%f' % _loss
+			print 'test mrr:\t%f' % MRR
+			print 'test map:\t%f' % MAP
+			# randomly inspect some questions
+			for i in range(20):
+				iid = random.randint(1, 100)
+				Exp.datas.displayQuestion(_prob_pos, iid, dataset = 'test')
+				raw_input('Press Enter to continue...')
+
+			
 
 if __name__ == '__main__':
 	print 'tensorflow version in use:  ' + tf.__version__

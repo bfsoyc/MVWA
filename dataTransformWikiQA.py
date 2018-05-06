@@ -52,12 +52,27 @@ for subset in dataset:
 	oov = set()	# out of vocabulary words
 
 	cnt = 0	# count of lines
+	previous_question = ''
+	q_id = 0
+	write_buffer = []
+	write_flag = False
 	for line in inFile:
 		cnt = cnt + 1;
 		items = line.strip().split('\t')
 		sentA = utils.sentenceNorm( items[ sentAIdx] )
 		sentB = utils.sentenceNorm( items[ sentBIdx] )
 		score = items[ relatedScore ]
+
+		if (previous_question != sentA):
+			q_id = q_id + 1
+			if (write_flag):
+				for l in write_buffer:
+					outFile.writelines(l)
+			write_flag = False
+			write_buffer[:] = []	# clear the buffer
+		previous_question = sentA
+		if (int(score) == 1):
+			write_flag = True
 
 		tokenA = []
 		for word in sentA.split(' '):
@@ -78,10 +93,16 @@ for subset in dataset:
 				print 'oov in line %d sentence B:\t%s\n' % (cnt, word) + sentB 
 				oov.add(word)
 
-		outFile.writelines( " ".join( tokenA ) + '\t' + " ".join(tokenB) + '\t' + score + '\n' )
+		if (len(tokenA) == 0 or len(tokenB) == 0):
+			continue
+		write_buffer.append( " ".join( tokenA ) + '\t' + " ".join(tokenB) + '\t' + score + '\t' + str(q_id) + '\t' + str(write_flag) + '\n' )
 		if( cnt % 500 == 0 ):
 			print '.'
-
+	
+	if (write_flag):
+		for l in write_buffer:
+			outFile.writelines(l)
+	
 	inFile.close()
 	outFile.close()
 

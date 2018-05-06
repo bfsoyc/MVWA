@@ -522,14 +522,15 @@ def expModel( maxLen , para ):
 		prob, logits = __softmaxLayer( feaVec, labelCnt = 2 )
 		prob_of_positive = prob[:,1]
 		d['prob_of_positive'] = prob_of_positive
-		label = tf.squeeze(tf.one_hot(indices = tf.cast(score, dtype = tf.int32) , depth = 2, on_value = 1.0, off_value = 0, name = 'one_hot_label'))
+		label = tf.squeeze(tf.one_hot(indices = tf.cast(score, dtype = tf.int32) , depth = 2, on_value = 1.0, off_value = 0.0, dtype = tf.float32, name = 'one_hot_label'))
 		wPenalty = __applyL2Norm()
 		#-------------------
 		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty
-
+		d['loss'] = loss
 		# add summary for tensorboard visulization
 		prob_mse = tf.reduce_mean(   tf.reduce_sum( (prob-label)**2 , axis = 1) )	
 		d['prob_mse'] = prob_mse
+		tf.summary.scalar( 'loss' , loss )
 
 	placehodlers = [sent1, sent2, score, lens1, lens2]
 	return placehodlers, d
@@ -731,8 +732,8 @@ def gridRnnModel( maxLen , para ):
 		prob_mse = mse = loss*16	# advanced computation
 
 		# add summary for tensorboard visulization
-		tf.summary.scalar( 'loss', loss )
-		tf.summary.scalar( 'similarity_MSE' , mse )
+		tf.summary.scalar('loss', loss)
+		tf.summary.scalar('similarity_MSE' , mse)
 
 
 	outputs1 = tf.constant(0,dtype=tf.int32)
