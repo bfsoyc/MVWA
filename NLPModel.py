@@ -413,7 +413,6 @@ def selfAttentionRnnModel( maxLen , para ):
 def expModel( maxLen , para ):
 	# pack all spec variable you want to verifiy in a dictionary
 	d = {}
-	hiddenSize = para.cellSize
 	
 	lens1 = tf.placeholder( dtype = tf.int32, shape = [None] )
 	lens2 = tf.placeholder( dtype = tf.int32, shape = [None] )
@@ -428,8 +427,8 @@ def expModel( maxLen , para ):
 	wordEmb1 = tf.nn.embedding_lookup( embMat, sent1 )
 	wordEmb2 = tf.nn.embedding_lookup( embMat, sent2 )
 		
-	cell_forward = tf.contrib.rnn.BasicLSTMCell( hiddenSize , forget_bias = para.forgetBias)
-	cell_backward = tf.contrib.rnn.BasicLSTMCell( hiddenSize , forget_bias = para.forgetBias)
+	cell_forward = tf.contrib.rnn.BasicLSTMCell( para.cellSize , forget_bias = para.forgetBias)
+	cell_backward = tf.contrib.rnn.BasicLSTMCell( para.cellSize , forget_bias = para.forgetBias)
 
 	outputs1, lastState1 = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb1, sequence_length = lens1 , dtype=tf.float32)
 	outputs2, lastState2 = tf.nn.bidirectional_dynamic_rnn( cell_fw = cell_forward, cell_bw = cell_backward, inputs = wordEmb2, sequence_length = lens2 , dtype=tf.float32)
@@ -459,30 +458,34 @@ def expModel( maxLen , para ):
 		attention_W = tf.get_variable( 'translation_weight', initializer = tf.truncated_normal( shape =  [hiddenSize, middlePara], stddev = 0.1 ) )
 		attention_S = tf.get_variable( 'combination_weight', initializer = tf.truncated_normal( shape =  [middlePara, para.attention_aspect], stddev = 0.1 ) )  
 
-	def getSentenceEmb( H, a_W , a_S, wordEmb , name = None ):
+	def getSentenceEmb( H, a_W , a_S, wordEmb , normType = None, name = None ):
 		batchSize = tf.shape(H)[0]
 		ext_W = tf.tile( tf.expand_dims( a_W, axis = 0 ), multiples = [batchSize,1,1] )
 		HW = tf.tanh( tf.matmul( H, ext_W ) )
 		ext_S = tf.tile( tf.expand_dims( a_S, axis = 0 ), multiples = [batchSize,1,1] )
 		unnorm_A = tf.matmul( HW, ext_S )
 		annotation = tf.nn.softmax( unnorm_A, axis = 1 )	# [batchSize, max_len, attention_aspect]
-		# a matrix's frobenius norm is equal to the square root of the summation of the square value of all elements. 
-		'''
-		A_loss = tf.reduce_mean(  tf.reduce_sum (tf.reduce_sum( tf.square (
-			tf.matmul( tf.transpose( annotation, perm = [0,2,1] ), annotation ) - 
-			tf.ones( shape = [para.attention_aspect, para.attention_aspect] , dtype=tf.float32 ) 
-		), axis=-1), axis=-1) );		# broadcasting apply to identity matrix.
-		'''
-		A_loss = tf.constant([0])
 
-		d[name+'_attention'] = annotation 	# debug usage
+		if (normType == 1):
+			# a matrix's frobenius norm is equal to the square root of the summation of the square value of all elements. 
+			A_loss = tf.reduce_mean(  tf.reduce_sum( tf.square (
+				tf.matmul( tf.transpose( annotation, perm = [0,2,1] ), annotation ) - tf.eye( para.attention_aspect , dtype=tf.float32 ) 		
+			), axis=[1,2]) );		# broadcasting apply to identity matrix.
+		elif (normType == 2):
+			# our proposal trace norm penalty
+			A_loss = -tf.reduce_mean(tf.reduce_sum(tf.matrix_diag_part(tf.matmul(tf.transpose(annotation, perm = [0,2,1] ), annotation)), axis = -1))
+		else:
+			A_loss = tf.constant(0)
+
+		# debug usage
+		d[name+'_annotation'] = annotation 	
 
 		weighted_H = tf.tile( tf.expand_dims ( wordEmb, axis = -1 ), multiples = [1,1,1,para.attention_aspect] ) * tf.tile( tf.expand_dims( annotation,axis = 2), multiples=[1,1,embeddingSize,1] )
 		sentEmb = tf.reduce_sum( weighted_H, axis = 1 )
  		return tf.unstack( sentEmb, axis = -1 ) , A_loss	# return a list where each element is a tensor of size [batchSize, word_embeddingSize], representing one aspect of the attention
 	
-	feas1, a_loss1 = getSentenceEmb( h1, attention_W, attention_S, wordEmb1 , 'sent1' )
-	feas2, a_loss2 = getSentenceEmb( h2, attention_W, attention_S, wordEmb2 , 'sent2')
+	feas1, a_loss1 = getSentenceEmb( h1, attention_W, attention_S, wordEmb1 , normType = para.penaltyType, name = 'sent1' )
+	feas2, a_loss2 = getSentenceEmb( h2, attention_W, attention_S, wordEmb2 , normType = para.penaltyType, name = 'sent2')
 	
 	# the last softmax layer is depended on the downstream application
 	if( para.dataset == 'SICK' ):
@@ -499,9 +502,8 @@ def expModel( maxLen , para ):
 		wPenalty = __applyL2Norm()
 		#-------------------
 		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty		
-		if( para.use_annotation_orthgonal_loss==1 ):
-			penalty_strength = 4e-4;
-			loss = loss + penalty_strength * (a_loss1 + a_loss2);
+		if (para.penaltyType != 0):
+			loss = loss + para.penalty_strength * (a_loss1 + a_loss2)
 		d['loss'] = loss
 
 		pearson_r = __pearson_r( y, score )
@@ -516,7 +518,7 @@ def expModel( maxLen , para ):
 		tf.summary.scalar( 'pearson_r', pearson_r )
 		tf.summary.scalar( 'loss' , loss )
 
-	elif ( para.dataset == 'WikiQA' ):
+	elif ( para.dataset == 'WikiQA' or para.dataset == 'LBA'):
 		feaVec = __feaTransform( feas1, feas2, outputSize = para.finalFeaSize )
 		# softmax layer
 		prob, logits = __softmaxLayer( feaVec, labelCnt = 2 )
@@ -526,6 +528,8 @@ def expModel( maxLen , para ):
 		wPenalty = __applyL2Norm()
 		#-------------------
 		loss = tf.reduce_mean( tf.nn.softmax_cross_entropy_with_logits( labels = label, logits = logits, name = 'cross_entropy_loss' ) ) + wPenalty
+		if (para.penaltyType != 0):
+			loss = loss + para.penalty_strength * (a_loss1 + a_loss2)
 		d['loss'] = loss
 		# add summary for tensorboard visulization
 		prob_mse = tf.reduce_mean(   tf.reduce_sum( (prob-label)**2 , axis = 1) )	

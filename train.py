@@ -1,6 +1,7 @@
 # my own module
 import SICK
 import WikiQA
+import LBA
 import utils
 import NLPModel
 import ConfigReader as confrd
@@ -27,11 +28,16 @@ class Exp:
 		Exp.para = para
 		
 		embDir = '../data/expCorpus'
-			
+		if (para.dataset == 'LBA'):	
+			# chinese word embedding
+			embDir = '../data/expLBA'		
+	
 		# load embedding matrix
 		d = para.embeddingSize
 		emb = np.fromfile( embDir+'/embMat' + str(d) + '.bin', dtype = np.float32)
 		emb.shape = -1,d
+		print 'word embedding matrix shape:'
+		print emb.shape
 
 		# load data
 		if (para.dataset == 'SICK'):
@@ -41,9 +47,11 @@ class Exp:
 			dataPathPrefix = '../data/expQACorpus/'
 			Exp.datas = WikiQA.loadData(dataPathPrefix, emb.shape[0])
 			Exp.datas.truncate( len_limit = para.sentenceTruncate )
+		elif (para.dataset == 'LBA'):
+			dataPath = '../data/expLBA/cleanData8.txt'
+			Exp.datas = LBA.loadData(dataPath, emb.shape[0])
+			Exp.datas.truncate( len_limit = para.sentenceTruncate )
 		Exp.datas.loadVocb( embDir + '/vocb.txt')
-
-		
 
 		with tf.variable_scope( "embeddingLayer"):
 			Exp.embMat = tf.get_variable( "embedding", initializer = emb, trainable = para.trainEmbedding)
@@ -85,13 +93,19 @@ class Exp:
 
 		itr = Exp.para.itr
 		batchSize = Exp.para.batchSize
+		save_flag = False
 		print '=======================train phase=================================='
 		print 'max sequence_length: %d ' % self.datas.maxLen
 		for i in range( itr):
 			s1,s2, score, slen1, slen2 = Exp.datas.getNextBatch( batchSize)
 			feedDatas = [s1, s2, np.reshape(score,(-1,1)), slen1, slen2 ]	# reshape score from 1-d list to a ?-by-1 2-d numpy array
 			_loss, _ = sess.run( [self.tensorDict['loss'], train_step], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
-				
+			'''
+			for k in range(len(s1)):
+				Exp.datas.displaySent(s1[k])
+				Exp.datas.displaySent(s2[k])
+				print score[k]
+			'''
 			# print info and save
 			if (i % self.para.modelSavePeriod != 0):
 				continue	
@@ -101,7 +115,7 @@ class Exp:
 				s1,s2, score, slen1, slen2, idx = Exp.datas.getValidSet()
 				sc = np.reshape(score,(-1,1))
 				feedDatas = [s1, s2, sc, slen1, slen2 ]
-				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.tensorDict['loss'], self.tensorDict['prob'], self.tensorDict['y'], merged, self.tensorDict['prob_mse'], self.tensorDict['mse'], self.tensorDict['pearson_r'], self.tensorDict['sent1_attention'], self.tensorDict['sent2_attention'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
+				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.tensorDict['loss'], self.tensorDict['prob'], self.tensorDict['y'], merged, self.tensorDict['prob_mse'], self.tensorDict['mse'], self.tensorDict['pearson_r'], self.tensorDict['sent1_annotation'], self.tensorDict['sent2_annotation'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
 				#_loss, _prob, _y, _merged, _prob_mse, _mse, _pr = sess.run( [self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
 				print 'valid loss: ' + str(_loss)
 				print 'prob_MSE ' + str( _prob_mse)
@@ -147,9 +161,9 @@ class Exp:
 					print 'ground true:\t%d, pred:\t%f' % (score[idx],_prob_pos[idx])
 				'''
 				MRR, MAP = Exp.datas.evaluateOn(_prob_pos, 'dev')
-				print 'test loss:\t%f' % _loss
-				print 'test mrr:\t%f' % MRR
-				print 'test map:\t%f' % MAP
+				print 'valid loss:\t%f' % _loss
+				print 'valid mrr:\t%f' % MRR
+				print 'valid map:\t%f' % MAP
 
 				# test set
 				s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet()
@@ -160,6 +174,14 @@ class Exp:
 				print 'test loss:\t%f' % _loss
 				print 'test mrr:\t%f' % MRR
 				print 'test map:\t%f' % MAP
+			elif (self.para.dataset == 'LBA'):
+				print 'train loss:\t%f' % _loss
+				# save
+				if not save_flag:
+					save_flag = True
+					dataPath = '../data/expLBA/fastText.txt'
+					Exp.datas.save4FastText(dataPath)
+				_, _prob_pos, _merged = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'], merged ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })			
 
 			# save log
 			writer.add_run_metadata( tf.RunMetadata() , 'itr:%d' % i)
@@ -188,7 +210,7 @@ class Exp:
 			s1,s2, score, slen1, slen2,idx = Exp.datas.getTestSet()
 			sc = np.reshape(score,(-1,1))
 			feedDatas = [s1, s2, sc, slen1, slen2 ]
-			_loss, _prob, _y, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.loss, self.prob, self.pred, self.prob_mse, self.mse, self.pr, self.d['sent1_attention'], self.d['sent2_attention']], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
+			_loss, _prob, _y, _prob_mse, _mse, _pr, _a1, _a2 = sess.run( [self.tensorDict['loss'], self.tensorDict['prob'], self.tensorDict['y'], self.tensorDict['prob_mse'], self.tensorDict['mse'], self.tensorDict['pearson_r'], self.tensorDict['sent1_annotation'], self.tensorDict['sent2_annotation']], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
 
 			print '=======================test phase=================================='
 			self.datas.printInfo()
@@ -197,7 +219,9 @@ class Exp:
 			print 'MSE:\t' + str( _mse)
 			print 'pearson_r:\t' , _pr
 			print 'spearman_rho:\t', utils.spearman_rho( _y, sc)
-		
+			
+			utils.analysisBatchMatrixDependency(_a1, slen1)		
+
 			if (self.para.modelType == 6):
 				# inspect the annotation matrix
 				for i in range(50):
@@ -213,18 +237,47 @@ class Exp:
 			s1,s2, score, slen1, slen2, idx = Exp.datas.getTestSet()
 			sc = np.reshape(score,(-1,1))
 			feedDatas = [s1, s2, sc, slen1, slen2 ]
-			_loss, _prob_pos = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
+			_loss, _prob_pos, _annotation = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'],self.tensorDict['sent2_annotation']], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })
 			MRR, MAP = Exp.datas.evaluateOn(_prob_pos, 'test')
 			print 'test loss:\t%f' % _loss
 			print 'test mrr:\t%f' % MRR
 			print 'test map:\t%f' % MAP
+			
+			utils.analysisBatchMatrixDependency(_annotation, slen2)
+	
 			# randomly inspect some questions
 			for i in range(20):
 				iid = random.randint(1, 100)
 				Exp.datas.displayQuestion(_prob_pos, iid, dataset = 'test')
 				raw_input('Press Enter to continue...')
 
-			
+		elif (self.para.dataset == 'LBA'):
+				#s1,s2, score, slen1, slen2, cand, label = Exp.datas.randomEvalOnValil()
+				s1,s2, score, slen1, slen2, Q, A, L = Exp.datas.getValidSet()
+				
+				sc = np.reshape(score,(-1,1))
+				labelMap = Exp.datas.digitLabel
+				M = np.zeros((len(labelMap),len(labelMap)) , dtype = int)	# M[i][j]: the number of samples predicted to be category j while true label is i,  original label are sorted by their lexicographical order
+				for k in range(len(Q)):
+					feedDatas = [s1[k*L:(k+1)*L], s2[k*L:(k+1)*L], sc[k*L:(k+1)*L], slen1[k*L:(k+1)*L], slen2[k*L:(k+1)*L] ]
+					_, _prob_pos = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })			
+					pred, rk = utils.vote(A[k*L:(k+1)*L], _prob_pos)
+					'''
+					print 'Q:'
+					Exp.datas.displaySent( s1[k*L], slen1[k*L] )
+					for tt in range(len(rk)):
+						print 'Rank %d A:' % tt
+						Exp.datas.displaySent( s2[k*L+rk[tt]], slen2[k*L+rk[tt]] )
+						print _prob_pos[rk[tt]]
+					'''
+					t = labelMap[Q[k]]
+					p = labelMap[pred]
+					M[t][p] += 1
+					print M
+				print 'confusion matrix:\t '
+				print np.array2string(M)				
+				print 'over all accuracy: %f' % (1.0*np.sum(np.diag(M)) / np.sum(M))	
+				
 
 if __name__ == '__main__':
 	print 'tensorflow version in use:  ' + tf.__version__

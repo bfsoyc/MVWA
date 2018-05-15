@@ -15,13 +15,14 @@ hiddenSize	150	#
 similarityMetric	1	# 1: softmax	2: Manhattan
 forgetBias	2	# set to an interger for convenience
 attention_aspect	32	# the number of groups of attention weights, only use for selfAttentionRnnModel.
-use_annotation_orthgonal_loss	0	# 1: use this loss as addition loss
+penaltyType	2	# 1: apply frobenius norm on annotation matrix	2: apply our proposal penalty	0: on penalty term, used to make a clean graph
+penalty_strength	0.0001	
 
-itr	4000	# 70 itr per epoch
+itr	1000	# 70 itr per epoch
 TrainFlag	0
 PredictFlag	1
-modelLoadVersion	490	# indicate which version of saved model you want to load for testing
+modelLoadVersion	560	# indicate which version of saved model you want to load for testing
 modelSavePeriod	35	# indicete how often we save and print loss on the screen, measuring by the number of iteration
 
 dataset	WikiQA	# SICK	or WikiQA
-sentenceTruncate	30	# 	
+sentenceTruncate	40	# 	

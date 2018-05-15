@@ -33,7 +33,11 @@ class Parameters:
 				exec 'self.%s = %f' % (key, float(value))
 			elif (key == 'keepProb'):
 				exec 'self.%s = %f' % (key, float(value))
+			elif (key == 'penalty_strength'):
+				exec 'self.%s = %f' % (key, float(value))
 			elif (key == 'modelType'):
+				exec 'self.%s = %d' % (key, int(value))
+			elif (key == 'penaltyType'):
 				exec 'self.%s = %d' % (key, int(value))
 			elif (key == 'rnnCellType'):
 				exec 'self.%s = %d' % (key, int(value))
@@ -64,7 +68,7 @@ class Parameters:
 		# varify some parameter
 		if (self.dataset == 'WikiQA' and self.modelType != 6):
 			raise Exception('only experimental model could be used on WikiQA dataset')
-		if (not self.dataset in ['SICK','WikiQA']):
+		if (not self.dataset in ['SICK','WikiQA','LBA']):
 			raise Exception('unkonwn dataset')
 
 		# set up some path
