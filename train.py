@@ -78,7 +78,9 @@ class Exp:
 		saveVar = tf.get_collection( tf.GraphKeys.TRAINABLE_VARIABLES)	
 		saver = tf.train.Saver( saveVar, max_to_keep = 50)
 
-		sess = tf.Session()
+		config = tf.ConfigProto()
+                config.gpu_options.allow_growth = True  # dynamic allow gpu resource to the program
+                sess = tf.Session(config = config)
 		sess.run( tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()))	# local variables for pearson correlation calculation
 
 		# create a summary writer, add the 'graph' to the event file.	
@@ -197,7 +199,9 @@ class Exp:
 
 
 	def predict(self):
-		sess = tf.Session()
+                config = tf.ConfigProto()
+                config.gpu_options.allow_growth = True
+		sess = tf.Session(config = config)
 		sess.run( tf.group(tf.global_variables_initializer(), tf.local_variables_initializer()))	
 		
 		saveVar = tf.get_collection( tf.GraphKeys.TRAINABLE_VARIABLES)	
@@ -252,17 +256,24 @@ class Exp:
 				raw_input('Press Enter to continue...')
 
 		elif (self.para.dataset == 'LBA'):
-				#s1,s2, score, slen1, slen2, cand, label = Exp.datas.randomEvalOnValil()
-				s1,s2, score, slen1, slen2, Q, A, L = Exp.datas.getValidSet()
+                                Exp.datas.inspectSentByLabel('dev','Q')
+                                Exp.datas.inspectSentByLabel('test', 'Q')
+                                #s1,s2, score, slen1, slen2, cand, label = Exp.datas.randomEvalOnValil()
+                                s1,s2, score, slen1, slen2, Q, A, L = Exp.datas.getEvalSet('both', label_set = 'Q') # inspect all incorrect classificated sample with label Q
 				
 				sc = np.reshape(score,(-1,1))
 				labelMap = Exp.datas.digitLabel
 				M = np.zeros((len(labelMap),len(labelMap)) , dtype = int)	# M[i][j]: the number of samples predicted to be category j while true label is i,  original label are sorted by their lexicographical order
 				for k in range(len(Q)):
 					feedDatas = [s1[k*L:(k+1)*L], s2[k*L:(k+1)*L], sc[k*L:(k+1)*L], slen1[k*L:(k+1)*L], slen2[k*L:(k+1)*L] ]
-					_, _prob_pos = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, feedDatas) })			
-					pred, rk = utils.vote(A[k*L:(k+1)*L], _prob_pos)
-					'''
+                                        prob_list = []
+                                        for batch_idx in range(L/500+1):
+                                            batch_datas = [fd[batch_idx * 500 : (batch_idx+1)*500] for fd in feedDatas]
+                                            _, _prob_pos = sess.run( [self.tensorDict['loss'], self.tensorDict['prob_of_positive'] ], feed_dict = { placeholder: feedData  for placeholder,feedData in zip( self.placehodlers, batch_datas) })
+                                            prob_list.append(_prob_pos)
+                                        _prob_pos = np.concatenate(prob_list, axis = 0)
+					pred, rk = utils.vote(A[k*L:(k+1)*L], _prob_pos, top_k = 15)
+	 				'''
 					print 'Q:'
 					Exp.datas.displaySent( s1[k*L], slen1[k*L] )
 					for tt in range(len(rk)):
@@ -273,7 +284,15 @@ class Exp:
 					t = labelMap[Q[k]]
 					p = labelMap[pred]
 					M[t][p] += 1
-					print M
+                                        if (k%(len(Q)/100) == 0):
+                                                print 'progress: %f' % (1.0*k/len(Q))
+                                                print M
+                                        if (t != p):
+                                                print 'True Label %s' % Q[k]
+                                                Exp.datas.displaySent( s1[k*L], slen1[k*L] )
+                                                for cc,idx in enumerate(rk):
+                                                        print 'Rank %d A: %s' % (cc, A[k*L+idx])
+                                                        Exp.datas.displaySent( s2[k*L+idx], slen2[k*L+idx] )
 				print 'confusion matrix:\t '
 				print np.array2string(M)				
 				print 'over all accuracy: %f' % (1.0*np.sum(np.diag(M)) / np.sum(M))	
