@@ -59,6 +59,8 @@ class Parameters:
 				exec 'self.%s = %d' % (key, int(value))
 			elif (key == 'sentenceTruncate'):
 				exec 'self.%s = %d' % (key, int(value))
+			elif (key == 'dataPath'):
+				exec 'self.%s = \'%s\'' % (key, str(value))
 			elif (key == 'dataset'):
 				exec 'self.%s = \'%s\'' % (key, str(value))
 			else:
