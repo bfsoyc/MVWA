@@ -1,28 +1,32 @@
-trainEmbedding	1
+# parameter about datas
+dataPath	./data/WikiQACorpus	
 embeddingSize	300
-finalFeaSize	128
+dataset	WikiQA	# SICK	or WikiQA or LBA
+sentenceTruncate	40	#
+
+# parameter for training the model
+itr	1000	# the max iteration
+TrainFlag	1	# train the model or not
+PredictFlag	1	# test the model or not
+modelLoadVersion	560	
+modelSavePeriod	35	
 batchSize	20
 learningRate	0.001
 keepProb	1
+trainEmbedding	1
+forgetBias	2	
+penalty_strength	0.0001
 
+# parameter of the model structure
 modelType	6	# 1:averageModel 2: rnnModel 3: selfRnnModel( an unroll rnn model ) 4: gridRnnModel( 2D-rnn ) 5: selfAttentionRnnModel 6: experimentalModel
 
-# for rnn model
+finalFeaSize	128	# input dimension of softmax classifier
 rnnCellType	1	# 1:BasicLSTMCell	2:GRUCell
-activationType	1	# 1: tanh 2: identity	, define the activation of output of rnn cell don't use identity
-cellSize	128	# the units of rnn cell
-hiddenSize	150	#
-similarityMetric	1	# 1: softmax	2: Manhattan
-forgetBias	2	# set to an interger for convenience
+activationType	1	
+cellSize	128	
+hiddenSize	150	
+similarityMetric	1
+
 attention_aspect	32	# the number of groups of attention weights
-penaltyType	2	# 1: apply frobenius norm on annotation matrix	2: apply our proposal penalty	0: no penalty term, used to make a clean graph
-penalty_strength	0.0001	# strength for penalty of annotation matrix
+penaltyType	2
 
-itr	1000	# 70 itr per epoch
-TrainFlag	0
-PredictFlag	1
-modelLoadVersion	560	# indicate which version of saved model you want to load in predict phase
-modelSavePeriod	35	# indicete how often we save and print loss on the screen, measuring by the number of iteration
-
-dataset	WikiQA	# SICK	or WikiQA
-sentenceTruncate	40	# 	

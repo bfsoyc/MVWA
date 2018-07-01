@@ -13,8 +13,9 @@ import os
 import utils
 import numpy as np
 
+print '===================data transform======================='
 inFilePath = './data/SICK/SICK.txt'
-inFile = open( inFilePath, "r" )
+inFile = open(inFilePath, "r")
 
 outDir = './data/SICK'
 if not os.path.exists(outDir):
@@ -22,7 +23,7 @@ if not os.path.exists(outDir):
 
 d = 300
 # load the vocabulary, of which each row is began with a word followed by n-dimensional embedding vector
-vocbPath = '../data/glove.6B/glove.6B.300d.txt'
+vocbPath = './data/glove.6B/glove.6B.300d.txt'
 vocbFile = open(vocbPath, "r")
 vocb = {}
 vocbList = []
@@ -42,7 +43,13 @@ for line in vocbFile:
 emb.append([.0] * d) 	# the end symbol of sequences assign to the last word in the dictinoary
 np.array(emb).astype('float32').tofile(outDir + '/embMat' + str(d) + '.bin')
 vocbFile.close()
-#vocbSave.close() 
+# save the vocabulary in the order they occurs in the embedding matrix
+vocPath = outDir + '/vocb.txt'
+vocFile = open(vocPath, "w")
+for word in vocbList:
+	vocFile.writelines(word + '\t' +  str(vocb[word]) + '\n')
+vocFile.close()
+print 'corups vocabulary word saved at %s' % vocPath
 
 # the colume index of the raw data
 sentAIdx = 1
@@ -85,6 +92,7 @@ for line in inFile:
 	outFile.writelines(" ".join( tokenA ) + '\t' + " ".join(tokenB) + '\t' + score + '\n')
 inFile.close()
 outFile.close()
+print 'sentence token saved at %s' % outFilePath
 
 # save the oov
 oovPath = outDir + '/oov.txt'
@@ -92,17 +100,7 @@ oovFile = open(oovPath, "w")
 for key in oov:
 	oovFile.writelines(str(key)+'\n')
 oovFile.close()
-
-# save the vocabulary in the order they occurs in the embedding matrix
-vocPath = outDir + '/vocb.txt'
-vocFile = open(vocPath, "w")
-for word in vocbList:
-	vocFile.writelines(word + '\t' +  str(vocb[word]) + '\n')
-vocFile.close()
-
-print '========================================================'
-print 'SICK data preprocess done.'
-print 'sentence token saved at %s' % outFilePath
 print 'out of vocabulary word saved at %s' % oovPath
-print 'corups vocabulary word saved at %s' % vocPath
+
+print 'SICK data preprocess done.'
 print '========================================================'
