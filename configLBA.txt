@@ -1,28 +1,32 @@
-trainEmbedding	1
+# parameter about datas
+dataPath	./data/LibBA	
 embeddingSize	300
-finalFeaSize	125
+dataset	LBA	# SICK	or WikiQA or LBA
+sentenceTruncate	32
+
+# parameter for training the model
+itr	5001
+TrainFlag	1	# train the model or not
+PredictFlag	1	# test the model or not
+modelLoadVersion	5000	
+modelSavePeriod	100	
 batchSize	128
 learningRate	0.001
 keepProb	1
-
-modelType	6	# 1:averageModel 2: rnnModel 3: selfRnnModel( an unroll rnn model ) 4: gridRnnModel( 2D-rnn ) 5: selfAttentionRnnModel 6: experimentalModel
-
-# for rnn model
-rnnCellType	1	# 1:BasicLSTMCell	2:GRUCell
-activationType	1	# 1: tanh 2: identity	, define the activation of output of rnn cell don't use identity
-cellSize	128	# the units of rnn cell
-hiddenSize	145	#
-similarityMetric	1	# 1: softmax	2: Manhattan
-forgetBias	2	# set to an interger for convenience
-attention_aspect	25	# the number of groups of attention weights, only use for selfAttentionRnnModel.
-penaltyType	0	# 1: apply frobenius norm on annotation matrix	2: apply our proposal penalty	0: on penalty term, used to make a clean graph
+trainEmbedding	1
+forgetBias	2	
 penalty_strength	0.0001
 
-itr	5001	# 70 itr per epoch
-TrainFlag	0
-PredictFlag	1
-modelLoadVersion	5000	# indicate which version of saved model you want to load for testing
-modelSavePeriod	100	# indicete how often we save and print loss on the screen, measuring by the number of iteration
+# parameter of the model structure
+modelType	6	# 1:averageModel 2: rnnModel 3: selfRnnModel( an unroll rnn model ) 4: gridRnnModel( 2D-rnn ) 5: selfAttentionRnnModel 6: experimentalModel
 
-dataset	LBA	# SICK	or WikiQA or LBA
-sentenceTruncate	32	# 	
+finalFeaSize	125	# input dimension of softmax classifier
+rnnCellType	1	# 1:BasicLSTMCell	2:GRUCell
+activationType	1	
+cellSize	128	
+hiddenSize	145	
+similarityMetric	1
+
+attention_aspect	25	# the number of groups of attention weights
+penaltyType	0
+

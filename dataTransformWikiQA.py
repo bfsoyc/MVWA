@@ -20,7 +20,7 @@ if not os.path.exists(outDir):
 	os.makedirs(outDir)
 
 d = 300
-vocbPath = '../data/glove.6B/glove.6B.300d.txt'
+vocbPath = './data/glove.6B/glove.6B.300d.txt'
 vocbFile = open(vocbPath, "r")
 vocb = {}
 vocbList = []

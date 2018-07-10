@@ -107,7 +107,7 @@ class WikiQAData():
 			print '%s\t%d\t%d\t%.2f\t%.2f' % (subset, qNum, cNum, qAveLen, cAveLen)
 
 	def loadVocb(self, path):
-		file_to_read = open(path ,'r')
+		file_to_read = open(path, 'r')
 		for line in file_to_read:
 			word, word_id = line.split('\t')
 			self.tokenMap[int(word_id)] = word

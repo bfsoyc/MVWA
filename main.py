@@ -37,8 +37,7 @@ class modelManeger:
 			self.datas = WikiQA.loadData(para.dataPath, emb.shape[0])
 			self.datas.truncate(len_limit = para.sentenceTruncate)
 		elif (para.dataset == 'LBA'):
-			dataPath = '../data/expLBA/cleanData8.txt'
-			self.datas = LBA.loadData(dataPath, emb.shape[0])
+			self.datas = LBA.loadData(para.dataPath + '/token.txt', emb.shape[0])
 			self.datas.truncate(len_limit = para.sentenceTruncate)
 		self.datas.loadVocb(para.dataPath + '/vocb.txt')
 
@@ -156,7 +155,7 @@ class modelManeger:
 					save_flag = True
 					dataPath = '../data/expLBA/fastText.txt'
 					self.datas.save4FastText(dataPath)
-				_, _prob_pos, _merged = sess.run([self.tensorDict['loss'], self.tensorDict['prob_of_positive'], merged], feed_dict = { placeholder: feedData  for placeholder,feedData in zip(self.placehodlers, feedDatas) })			
+				_, _prob_pos, _merged = sess.run([self.tensorDict['loss'], self.tensorDict['prob_of_positive'], merged], feed_dict = {placeholder : feedData for placeholder,feedData in zip(self.placehodlers, feedDatas)})			
 
 			# save log
 			writer.add_run_metadata(tf.RunMetadata(), 'itr:%d' % i)
@@ -222,48 +221,39 @@ class modelManeger:
 				raw_input('Press Enter to continue...')
 
 		elif (self.para.dataset == 'LBA'):
-                                self.datas.inspectSentByLabel('dev','Q')
-                                self.datas.inspectSentByLabel('test', 'Q')
-                                #s1,s2, score, slen1, slen2, cand, label = self.datas.randomEvalOnValil()
-                                s1,s2, score, slen1, slen2, Q, A, L = self.datas.getEvalSet('both', label_set = 'Q') # inspect all incorrect classificated sample with label Q
+				#self.datas.inspectSentByLabel('test', 'Q')  # debug use
+				s1, s2, score, slen1, slen2, evalSet_label, ref_label, L = self.datas.getEvalSet('both', label_set = 'Q') # inspect all incorrect classificated sample with label Q
 				
-				sc = np.reshape(score,(-1,1))
+				sc = np.reshape(score, (-1, 1))
 				labelMap = self.datas.digitLabel
-				M = np.zeros((len(labelMap),len(labelMap)) , dtype = int)	# M[i][j]: the number of samples predicted to be category j while true label is i,  original label are sorted by their lexicographical order
-				for k in range(len(Q)):
-					feedDatas = [s1[k*L:(k+1)*L], s2[k*L:(k+1)*L], sc[k*L:(k+1)*L], slen1[k*L:(k+1)*L], slen2[k*L:(k+1)*L]]
-                                        prob_list = []
-                                        for batch_idx in range(L/500+1):
-                                            batch_datas = [fd[batch_idx * 500 : (batch_idx+1)*500] for fd in feedDatas]
-                                            _, _prob_pos = sess.run([self.tensorDict['loss'], self.tensorDict['prob_of_positive']], feed_dict = { placeholder: feedData  for placeholder,feedData in zip(self.placehodlers, batch_datas) })
-                                            prob_list.append(_prob_pos)
-                                        _prob_pos = np.concatenate(prob_list, axis = 0)
-					pred, rk = utils.vote(A[k*L:(k+1)*L], _prob_pos, top_k = 15)
-	 				'''
-					print 'Q:'
-					self.datas.displaySent(s1[k*L], slen1[k*L])
-					for tt in range(len(rk)):
-						print 'Rank %d A:' % tt
-						self.datas.displaySent(s2[k*L+rk[tt]], slen2[k*L+rk[tt]])
-						print _prob_pos[rk[tt]]
-					'''
-					t = labelMap[Q[k]]
-					p = labelMap[pred]
-					M[t][p] += 1
-                                        if (k%(len(Q)/100) == 0):
-                                                print 'progress: %f' % (1.0*k/len(Q))
-                                                print M
-                                        if (t != p):
-                                                print 'True Label %s' % Q[k]
-                                                self.datas.displaySent(s1[k*L], slen1[k*L])
-                                                for cc,idx in enumerate(rk):
-                                                        print 'Rank %d A: %s' % (cc, A[k*L+idx])
-                                                        self.datas.displaySent(s2[k*L+idx], slen2[k*L+idx])
+				M = np.zeros((len(labelMap), len(labelMap)) , dtype = int)	# M[i][j]: the number of samples predicted to be category j while true label is i, original label are sorted by their lexicographical order
+				for k in range(len(evalSet_label)):
+					feedDatas = [s1[k * L:(k + 1) * L], s2[k * L:(k + 1) * L], sc[k * L:(k + 1) * L], slen1[k * L:(k + 1) * L], slen2[k * L:(k + 1) * L]]
+					prob_list = []
+					# for each samples in evaluation set, we have L sentences pairs.
+					# we split these L records in small batches to process since L is too large.
+					for batch_idx in range(L / 500 + 1):
+						batch_datas = [fd[batch_idx * 500 : (batch_idx + 1) * 500] for fd in feedDatas]
+						_, _prob_pos = sess.run([self.tensorDict['loss'], self.tensorDict['prob_of_positive']], feed_dict = {placeholder : feedData for placeholder, feedData in zip(self.placehodlers, batch_datas)})
+						prob_list.append(_prob_pos)
+					_prob_pos = np.concatenate(prob_list, axis = 0)
+					pred, rk = utils.vote(ref_label[k * L:(k + 1) * L], _prob_pos, top_k = 15)
+					true_label = labelMap[evalSet_label[k]]
+					pred_label = labelMap[pred]
+					M[true_label][pred_label] += 1
+					if (k % (len(evalSet_label) / 100) == 0):
+						print 'progress: %f' % (1.0 * k / len(evalSet_label))
+						print M
+					if (true_label != pred_label):
+						print 'True Label %s' % evalSet_label[k]
+						self.datas.displaySent(s1[k * L], slen1[k * L])
+						for cc,idx in enumerate(rk):
+							print 'Rank %d A: %s' % (cc, A[k * L + idx])
+							self.datas.displaySent(s2[k * L + idx], slen2[k * L + idx])
 				print 'confusion matrix:\t '
-				print np.array2string(M)				
-				print 'over all accuracy: %f' % (1.0*np.sum(np.diag(M)) / np.sum(M))	
+				print np.array2string(M)			
+				print 'over all accuracy: %f' % (1.0 * np.sum(np.diag(M)) / np.sum(M))
 				
-
 if __name__ == '__main__':
 	print 'tensorflow version in use:  ' + tf.__version__
 	
