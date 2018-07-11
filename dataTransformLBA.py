@@ -46,7 +46,7 @@ vocbFile.close()
 vocPath = outDir + '/vocb.txt'
 vocFile = open(vocPath, "w")
 for word in vocbList:
-	vocFile.writelines(word.encode('utf-8') + '\t' +  str(vocb[word]) + '\n')
+	vocFile.writelines(str(word.encode('utf-8') + ('\t' +  str(vocb[word]) + '\n').encode('utf-8')))
 vocFile.close()
 print 'corups vocabulary word saved at %s' % vocPath
 
@@ -60,7 +60,6 @@ outLabelFile = open(outDir + '/label.txt', 'w')
 outABSFile = open(outDir + '/abstract.txt', 'w')  # save the abstract string
 outJiebaFile = open(outDir + '/jieba_seg.txt', 'w')  # save the segmentation of abstract string
 
-debug_flag = False
 CLCIdx = 15
 AbsIdx = 24
 minLen = 8
@@ -74,7 +73,7 @@ for r, line in enumerate(inCVSFile):
 		jieba_seg = ' '.join(jieba.cut(ABS))
 		outLabelFile.writelines(CLC + '\n')
 		outABSFile.writelines(ABS + '\n')
-		outJiebaFile.writelines(jieba_seg.encode('utf-8') + '\n')
+		outJiebaFile.writelines(str(jieba_seg.encode('utf-8') + '\n'.encode('utf-8')))
 
 		token = []		
 		for word in jieba_seg.split(' '):
@@ -82,9 +81,7 @@ for r, line in enumerate(inCVSFile):
 				continue
 			if word in vocb:
 				token.append(str(vocb[word]))
-			else:
-				if (debug_flag):
-					print 'oov: ' + word.encode('utf-8') + ' in sentence: \n' + jieba_seg.encode('utf-8')		 
+			else:	 
 				oov.add(word)
 	
 		if (len(token) >= minLen):	#filter short text
@@ -105,7 +102,7 @@ outJiebaFile.close()
 oovPath = outDir + '/oov.txt'
 oovFile = open(oovPath, "w")
 for key in oov:
-	oovFile.writelines(key.encode('utf-8') +'\n')
+	oovFile.writelines(str(key.encode('utf-8') +'\n'.encode('utf-8')))
 oovFile.close()
 print 'out of vocabulary word saved at %s' % oovPath
 
