@@ -26,14 +26,14 @@ def rnnModel(maxLen, para):
 	if(para.activationType == 1):
 		activeFuc = tf.tanh
 	elif(para.activationType == 2):
-  		activeFuc = tf.identity
+		activeFuc = tf.identity
 
 	if(para.rnnCellType == 1):
 		cell = tf.contrib.rnn.BasicLSTMCell(hiddenSize, activation = activeFuc, forget_bias = para.forgetBias)
 	elif(para.rnnCellType == 2):
 		cell = tf.contrib.rnn.GRUCell(hiddenSize)
 	#cell = tf.contrib.rnn.DropoutWrapper(cell=cell, output_keep_prob = para.keepProb)
-	outputs1, states1 = tf.nn.dynamic_rnn(cell, wordEmb1, sequence_length = lens1, dtype=tf.float32)	# states is a tuple with final outputs(.h) and cellstate (.c)
+	outputs1, states1 = tf.nn.dynamic_rnn(cell, wordEmb1, sequence_length = lens1, dtype=tf.float32)  # states is a tuple with final outputs(.h) and cellstate (.c)
 	outputs2, states2 = tf.nn.dynamic_rnn(cell, wordEmb2, sequence_length = lens2, dtype=tf.float32)
 	if(para.rnnCellType == 1):
 		feas1 = [states1.c]
@@ -47,13 +47,13 @@ def rnnModel(maxLen, para):
 		feaVec, w_a, w_d = __feaTransform(feas1, feas2, outputSize = hiddenSize)
 
 		# softmax layer
-		w = tf.get_variable('softmax_weight', initializer = tf.truncated_normal(shape =  [hiddenSize, 5], stddev = 0.1))
-		b = tf.get_variable('softmax_bias', initializer = tf.truncated_normal(shape =  [5], stddev = 0.1))
+		w = tf.get_variable('softmax_weight', initializer = tf.truncated_normal(shape = [hiddenSize, 5], stddev = 0.1))
+		b = tf.get_variable('softmax_bias', initializer = tf.truncated_normal(shape = [5], stddev = 0.1))
 		logits = tf.matmul(feaVec, w) + b 
 		prob = tf.nn.softmax(logits)
 
 		r = tf.constant(range(1,6), shape = [5,1], dtype = tf.float32)
-		y =  tf.matmul(prob, r) 
+		y = tf.matmul(prob, r) 
 		label = __scoreLabel2p(score)	
 		
 		wPenalty = __applyL2Norm()
@@ -63,7 +63,7 @@ def rnnModel(maxLen, para):
 		pearson_r = __pearson_r(y, score)
 
 		# add summary for tensorboard visulization
-		prob_mse = tf.reduce_mean(  tf.reduce_sum((prob-label)**2, axis = 1))	
+		prob_mse = tf.reduce_mean( tf.reduce_sum((prob-label)**2, axis = 1))	
 		mse = tf.reduce_mean(tf.square(y - score))
 		tf.summary.scalar('probability_MSE', prob_mse)
 		tf.summary.scalar('similarity_MSE', mse)
@@ -73,9 +73,9 @@ def rnnModel(maxLen, para):
 	elif(para.similarityMetric == 2):
 		# In "Manhattan" metric, we derive the estimation of similarity directly from the Mahhattan distance of the final states of LSTM 		
 		prob = tf.exp(-tf.reduce_sum(tf.abs(feas1[0] - feas2[0]), axis = 1, keep_dims = True))
-		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
+		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
 		prob = a*prob**2 + b*prob + c
 		label = __rescaleLabel(score)
 		wPenalty = __applyL2Norm()
@@ -83,7 +83,7 @@ def rnnModel(maxLen, para):
 
 		y = __rescaleLabel(prob, True)
 		pearson_r = __pearson_r(y, score)
-		prob_mse = mse = loss*16	# advanced computation
+		prob_mse = mse = loss*16  # advanced computation
 
 		# add summary for tensorboard visulization
 		tf.summary.scalar('loss', loss)
@@ -111,7 +111,7 @@ def selfRnnModel(maxLen, para):
 	t_wordEmb1 = tf.transpose(wordEmb1, perm = [1,0,2])
 	t_wordEmb2 = tf.transpose(wordEmb2, perm = [1,0,2])
 	
-	def  _dynamic_rnn(cell, length, inputs):
+	def _dynamic_rnn(cell, length, inputs):
 		# the implement of dynamic_rnn:
 		# min_seq_length and max_seq_length is the minimum and maximum length of sequences within a batch 
 		# we loop over the time 
@@ -119,10 +119,10 @@ def selfRnnModel(maxLen, para):
 		#		calculate the next state from previous state for all samples in the batchSize
 		# 		(just for the efficience of computation over batch?)		
 		#	else:
-		#		calculate the next state from previous state for all samples in the batchSize and set to zero_state for those which have done.  
+		#		calculate the next state from previous state for all samples in the batchSize and set to zero_state for those which have done. 
 		#
 		# noted that we have deprecated using term 'state' and 'output' to represent the cell state and the cell hypothesis output
-		# now we use a tuple, named state, to capsule all these array:  state = tuple(h = output, c = cell_state)   
+		# now we use a tuple, named state, to capsule all these array: state = tuple(h = output, c = cell_state)  
 		min_seq_length = tf.reduce_min(length)
 		max_seq_length = tf.reduce_max(length)
 		input_shape = tf.shape(inputs)	# tf.shape() return a tf.Tensor
@@ -163,7 +163,7 @@ def selfRnnModel(maxLen, para):
 
 		#
 		time = tf.constant(0, dtype = tf.int32, name = 'time')
-		_,  final_state, h_ta, c_ta = tf.while_loop(cond = lambda time, *_ : time < max_seq_length,
+		_, final_state, h_ta, c_ta = tf.while_loop(cond = lambda time, *_ : time < max_seq_length,
 														body = _time_step, loop_vars = (time, zero_state, h_ta, c_ta))
 
 		all_H = h_ta.stack()
@@ -173,7 +173,7 @@ def selfRnnModel(maxLen, para):
 	if(para.activationType == 1):
 		activeFuc = tf.tanh
 	elif(para.activationType == 2):
-  		activeFuc = tf.identity
+		activeFuc = tf.identity
 
 	if(para.rnnCellType == 1):
 		cell = tf.contrib.rnn.BasicLSTMCell(hiddenSize, activation = activeFuc, forget_bias = para.forgetBias)
@@ -190,13 +190,13 @@ def selfRnnModel(maxLen, para):
 		feaVec, w_a, w_d = __feaTransform(feas1, feas2, outputSize = hiddenSize)
 
 		# softmax layer
-		w = tf.get_variable('softmax_weight', initializer = tf.truncated_normal(shape =  [hiddenSize, 5], stddev = 0.1))
-		b = tf.get_variable('softmax_bias', initializer = tf.truncated_normal(shape =  [5], stddev = 0.1))
+		w = tf.get_variable('softmax_weight', initializer = tf.truncated_normal(shape = [hiddenSize, 5], stddev = 0.1))
+		b = tf.get_variable('softmax_bias', initializer = tf.truncated_normal(shape = [5], stddev = 0.1))
 		logits = tf.matmul(feaVec, w) + b 
 		prob = tf.nn.softmax(logits)
 
 		r = tf.constant(range(1,6), shape = [5,1], dtype = tf.float32)
-		y =  tf.matmul(prob, r) 
+		y = tf.matmul(prob, r) 
 		label = __scoreLabel2p(score)	
 
 		
@@ -207,7 +207,7 @@ def selfRnnModel(maxLen, para):
 		pearson_r = __pearson_r(y, score)
 
 		# add summary for tensorboard visulization
-		prob_mse = tf.reduce_mean(  tf.reduce_sum((prob-label)**2, axis = 1))	
+		prob_mse = tf.reduce_mean( tf.reduce_sum((prob-label)**2, axis = 1))	
 		mse = tf.reduce_mean(tf.square(y - score))
 		tf.summary.scalar('probability_MSE', prob_mse)
 		tf.summary.scalar('similarity_MSE', mse)
@@ -217,9 +217,9 @@ def selfRnnModel(maxLen, para):
 	elif(para.similarityMetric == 2):
 		# In "Manhattan" metric, we derive the estimation of similarity directly from the Mahhattan distance of the final states of LSTM 		
 		prob = tf.exp(-tf.reduce_sum(tf.abs(feas1[0] - feas2[0]), axis = 1, keep_dims = True))
-		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
+		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
 		prob = a*prob**2 + b*prob + c
 		label = __rescaleLabel(score)
 		wPenalty = __applyL2Norm()
@@ -227,7 +227,7 @@ def selfRnnModel(maxLen, para):
 
 		y = __rescaleLabel(prob, True)
 		pearson_r = __pearson_r(y, score)
-		prob_mse = mse = loss*16	# advanced computation
+		prob_mse = mse = loss*16  # advanced computation
 
 		# add summary for tensorboard visulization
 		tf.summary.scalar('loss', loss)
@@ -235,7 +235,7 @@ def selfRnnModel(maxLen, para):
 
 
 	outputs1 = tf.constant(0,dtype=tf.int32)
-	outputs2 = tf.constant(0,dtype=tf.int32)	# useless
+	outputs2 = tf.constant(0,dtype=tf.int32)  # useless
 	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, outputs1, outputs2, pearson_r, ah1, ac1, ah2, ac2
 
 def selfAttentionRnnModel(maxLen, para):
@@ -258,7 +258,7 @@ def selfAttentionRnnModel(maxLen, para):
 	t_wordEmb1 = tf.transpose(wordEmb1, perm = [1,0,2])
 	t_wordEmb2 = tf.transpose(wordEmb2, perm = [1,0,2])
 	
-	def  _self_attention_rnn(cell, length, inputs):
+	def _self_attention_rnn(cell, length, inputs):
 		# this implement is different from the proposal self-attention paper
 		# in the proposal paper, H with size d-by-n is denoted as the dynamic length hidden state of the sentence
 		# attention weights is calculated by :
@@ -271,7 +271,7 @@ def selfAttentionRnnModel(maxLen, para):
 		# in this implement, we use the hypothesis outputs of the rnn cells to compute the attention weights, denoted as H'
 		# H' is derived from H: H' = f(H) = H .* output_gate(X)
 		# for simplicity, attention(annotation) matrix is calculated by:
-		# A = softmax(S * H')   
+		# A = softmax(S * H')  
 		min_seq_length = tf.reduce_min(length)
 		max_seq_length = tf.reduce_max(length)
 		input_shape = tf.shape(inputs)	# tf.shape() return a tf.Tensor
@@ -287,7 +287,7 @@ def selfAttentionRnnModel(maxLen, para):
 
 		# create attention weights
 		with tf.variable_scope('attention_matrix', reuse = tf.AUTO_REUSE):
-			W1 = tf.get_variable('attention_weights', initializer = tf.truncated_normal(shape =  [cell.output_size, para.attention_aspect], stddev = 0.1)) 
+			W1 = tf.get_variable('attention_weights', initializer = tf.truncated_normal(shape = [cell.output_size, para.attention_aspect], stddev = 0.1)) 
 
 		# create tensor to store all temporary variable while processing the RNN
 		shp = [None, cell.output_size]	# element shape
@@ -324,7 +324,7 @@ def selfAttentionRnnModel(maxLen, para):
 
 		#
 		time = tf.constant(0, dtype = tf.int32, name = 'time')
-		_,  final_state, h_ta, c_ta, w_ta = tf.while_loop(cond = lambda time, *_ : time < max_seq_length,
+		_, final_state, h_ta, c_ta, w_ta = tf.while_loop(cond = lambda time, *_ : time < max_seq_length,
 														body = _time_step, loop_vars = (time, zero_state, h_ta, c_ta, w_ta))
 
 		all_H = h_ta.stack()
@@ -335,7 +335,7 @@ def selfAttentionRnnModel(maxLen, para):
 	if(para.activationType == 1):
 		activeFuc = tf.tanh
 	elif(para.activationType == 2):
-  		activeFuc = tf.identity
+		activeFuc = tf.identity
 
 	if(para.rnnCellType == 1):
 		cell = tf.contrib.rnn.BasicLSTMCell(hiddenSize, activation = activeFuc, forget_bias = para.forgetBias)
@@ -359,24 +359,23 @@ def selfAttentionRnnModel(maxLen, para):
 		feaVec, w_a, w_d = __feaTransform(feas1, feas2, outputSize = hiddenSize)
 
 		# softmax layer
-		w = tf.get_variable('softmax_weight', initializer = tf.truncated_normal(shape =  [hiddenSize, 5], stddev = 0.1))
-		b = tf.get_variable('softmax_bias', initializer = tf.truncated_normal(shape =  [5], stddev = 0.1))
+		w = tf.get_variable('softmax_weight', initializer = tf.truncated_normal(shape = [hiddenSize, 5], stddev = 0.1))
+		b = tf.get_variable('softmax_bias', initializer = tf.truncated_normal(shape = [5], stddev = 0.1))
 		logits = tf.matmul(feaVec, w) + b 
 		prob = tf.nn.softmax(logits)
 
 		r = tf.constant(range(1,6), shape = [5,1], dtype = tf.float32)
-		y =  tf.matmul(prob, r) 
+		y = tf.matmul(prob, r) 
 		label = __scoreLabel2p(score)	
 
 		
 		wPenalty = __applyL2Norm()
-		#wPenalty = L2Strength * (tf.reduce_sum(tf.square(w)) + tf.reduce_sum(tf.square(w_a)) + tf.reduce_sum(tf.square(w_d)))	# weight decay penalty
-		#-------------------
+		# wPenalty = L2Strength * (tf.reduce_sum(tf.square(w)) + tf.reduce_sum(tf.square(w_a)) + tf.reduce_sum(tf.square(w_d)))	# weight decay penalty
 		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = label, logits = logits, name = 'cross_entropy_loss')) + wPenalty
 		pearson_r = __pearson_r(y, score)
 
 		# add summary for tensorboard visulization
-		prob_mse = tf.reduce_mean(  tf.reduce_sum((prob-label)**2, axis = 1))	
+		prob_mse = tf.reduce_mean( tf.reduce_sum((prob-label)**2, axis = 1))	
 		mse = tf.reduce_mean(tf.square(y - score))
 		tf.summary.scalar('probability_MSE', prob_mse)
 		tf.summary.scalar('similarity_MSE', mse)
@@ -386,9 +385,9 @@ def selfAttentionRnnModel(maxLen, para):
 	elif(para.similarityMetric == 2):
 		# In "Manhattan" metric, we derive the estimation of similarity directly from the Mahhattan distance of the final states of LSTM 		
 		prob = tf.exp(-tf.reduce_sum(tf.abs(feas1[0] - feas2[0]), axis = 1, keep_dims = True))
-		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
+		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
 		prob = a*prob**2 + b*prob + c
 		label = __rescaleLabel(score)
 		wPenalty = __applyL2Norm()
@@ -411,7 +410,7 @@ def expModel(maxLen, para):
 	The expModel stands for experimental model.
 	It has now became MVWA(multi-view word attention model) after a number of iterations.
 	''' 	
-	d = {}  # pack all spec variable you want to verifiy outside this function scope in a dictionary
+	d = {} # pack all spec variable you want to verifiy outside this function scope in a dictionary
 	
 	lens1 = tf.placeholder(dtype = tf.int32, shape = [None])
 	lens2 = tf.placeholder(dtype = tf.int32, shape = [None])
@@ -445,7 +444,7 @@ def expModel(maxLen, para):
 		outputs1 = [outputs1]
 		outputs2 = [outputs2]	
 
-	H1 = tf.concat(outputs1 + getTileFinalOutput(outputs2, lastState2), axis = -1)  # combine feature and explore the interactive info
+	H1 = tf.concat(outputs1 + getTileFinalOutput(outputs2, lastState2), axis = -1) # combine feature and explore the interactive info
 	H2 = tf.concat(outputs2 + getTileFinalOutput(outputs1, lastState1), axis = -1)
 
 	# In our paper, the attention function is : annotation = softmax(W2 * tanh(W1 * H^T))
@@ -453,8 +452,8 @@ def expModel(maxLen, para):
 	row_W2 = para.hiddenSize
 	col_H = H1.get_shape().as_list()[2]
 	with tf.variable_scope('attention_function'):  # weights in attention function
-		attention_W1 = tf.get_variable('projection_weight', initializer = tf.truncated_normal(shape =  [col_H, row_W2], stddev = 0.1))
-		attention_W2 = tf.get_variable('combination_weight', initializer = tf.truncated_normal(shape =  [row_W2, para.attention_aspect], stddev = 0.1))  
+		attention_W1 = tf.get_variable('projection_weight', initializer = tf.truncated_normal(shape = [col_H, row_W2], stddev = 0.1))
+		attention_W2 = tf.get_variable('combination_weight', initializer = tf.truncated_normal(shape = [row_W2, para.attention_aspect], stddev = 0.1)) 
 
 	def getSentenceEmb(H, a_W1, a_W2, wordEmb, penaltyType = None, name = None):  # implement of attention function
 		batchSize = tf.shape(H)[0]
@@ -463,13 +462,13 @@ def expModel(maxLen, para):
 		tile_W2 = tf.tile(tf.expand_dims(a_W2, axis = 0), multiples = [batchSize,1,1])
 		unnorm_A = tf.matmul(HW, tile_W2)
 		annotation = tf.nn.softmax(unnorm_A, axis = 1)	# [batchSize, max_len, attention_aspect]
-		d[name+'_annotation'] = annotation  # debug use
+		d[name+'_annotation'] = annotation # debug use
 
 		if (penaltyType == 1):
 			# a matrix's frobenius norm is equal to the square root of the summation of the square value of all elements. 
 			A_loss = tf.reduce_mean( tf.reduce_sum(tf.square (
 				tf.matmul(tf.transpose(annotation, perm = [0,2,1]), annotation) - tf.eye(para.attention_aspect, dtype=tf.float32) 		
-			), axis=[1,2]));		# broadcasting apply to identity matrix.
+			), axis=[1,2]));  # broadcasting apply to identity matrix.
 		elif (penaltyType == 2):
 			# our proposal trace norm penalty
 			A_loss = -tf.reduce_mean(tf.reduce_sum(tf.matrix_diag_part(tf.matmul(tf.transpose(annotation, perm = [0,2,1]), annotation)), axis = -1))
@@ -478,7 +477,7 @@ def expModel(maxLen, para):
 		
 		weighted_H = tf.tile(tf.expand_dims(wordEmb, axis = -1), multiples = [1, 1, 1, para.attention_aspect]) * tf.tile(tf.expand_dims(annotation, axis = 2), multiples = [1, 1, embeddingSize, 1])
 		sentEmb = tf.reduce_sum(weighted_H, axis = 1)  # this formula holds provided that the embedding of padding token is all zeros 
- 		return tf.unstack(sentEmb, axis = -1), A_loss  # return a list where each element is a tensor of size [batchSize, word_embeddingSize], representing one aspect of the attention
+		return tf.unstack(sentEmb, axis = -1), A_loss  # return a list where each element is a tensor of size [batchSize, word_embeddingSize], representing one aspect of the attention
 	
 	feas1, a_loss1 = getSentenceEmb(H1, attention_W1, attention_W2, wordEmb1, penaltyType = para.penaltyType, name = 'sent1')
 	feas2, a_loss2 = getSentenceEmb(H2, attention_W1, attention_W2, wordEmb2, penaltyType = para.penaltyType, name = 'sent2')
@@ -495,7 +494,7 @@ def expModel(maxLen, para):
 		d['y'] = y
 		label = __scoreLabel2p(score)	
 		
-		wPenalty = __applyL2Norm()  # currently, the L2 norm only apply on softmax layer to prevent overfitting of the linear classifier
+		wPenalty = __applyL2Norm() # currently, the L2 norm only apply on softmax layer to prevent overfitting of the linear classifier
 		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = label, logits = logits, name = 'cross_entropy_loss')) + wPenalty		
 		if (para.penaltyType != 0):
 			loss = loss + para.penalty_strength * (a_loss1 + a_loss2)
@@ -527,7 +526,7 @@ def expModel(maxLen, para):
 			loss = loss + para.penalty_strength * (a_loss1 + a_loss2)
 		d['loss'] = loss
 		# add summary for tensorboard visulization
-		prob_mse = tf.reduce_mean(  tf.reduce_sum((prob-label)**2, axis = 1))	
+		prob_mse = tf.reduce_mean( tf.reduce_sum((prob-label)**2, axis = 1))	
 		d['prob_mse'] = prob_mse
 		tf.summary.scalar('loss', loss)
 
@@ -561,7 +560,7 @@ def gridRnnModel(maxLen, para):
 		dim1_maxlen = tf.reduce_max(lens1)
 		dim2_maxlen = tf.reduce_max(lens2) 
 		
-		input_shape = tf.shape(s1)	# tf.shape() return a tf.Tensor	
+		input_shape = tf.shape(s1)  # tf.shape() return a tf.Tensor	
 		batchSize = input_shape[1]
 		# create zero states
 		zero_state1 = cell.zero_state(batchSize, dtype = tf.float32)
@@ -646,7 +645,7 @@ def gridRnnModel(maxLen, para):
 				h_ta_vert = h_ta_vert.write(dim1, new_h_vert)
 				c_ta_vert = c_ta_vert.write(dim1, new_c_vert)
 				
-				return (dim1+1,  tf.contrib.rnn.LSTMStateTuple(c = new_c_hori, h = new_h_hori), tf.contrib.rnn.LSTMStateTuple(c = new_c_vert, h = new_h_vert),
+				return (dim1+1, tf.contrib.rnn.LSTMStateTuple(c = new_c_hori, h = new_h_hori), tf.contrib.rnn.LSTMStateTuple(c = new_c_vert, h = new_h_vert),
 						 h_ta_hori, c_ta_hori, h_ta_vert, c_ta_vert)
 
 
@@ -667,7 +666,7 @@ def gridRnnModel(maxLen, para):
 			C_ta_vert = C_ta_vert.write(dim2+1, c_ts_vert)
 
 
-			return  (dim2+1,H_ta_hori, C_ta_hori, H_ta_vert, C_ta_vert)  
+			return (dim2+1,H_ta_hori, C_ta_hori, H_ta_vert, C_ta_vert) 
 
 		dim2 = tf.constant(0, dtype = tf.int32, name = 'dim2_time')
 		_,H_ta_hori, C_ta_hori, H_ta_vert, C_ta_vert= tf.while_loop(cond = lambda time, *_: time < dim2_maxlen, parallel_iterations = 1,
@@ -676,13 +675,13 @@ def gridRnnModel(maxLen, para):
 		#
 		final_c_hori = C_ta_hori.read(dim2_maxlen)
 		final_c_vert = C_ta_vert.read(dim2_maxlen)
-		return  tf.concat([final_c_hori[-1], final_c_vert[-1]], axis = 1), C_ta_vert.stack(), H_ta_hori.stack(), H_ta_vert.stack()
+		return tf.concat([final_c_hori[-1], final_c_vert[-1]], axis = 1), C_ta_vert.stack(), H_ta_hori.stack(), H_ta_vert.stack()
 
 
 	if(para.activationType == 1):
 		activeFuc = tf.tanh
 	elif(para.activationType == 2):
-  		activeFuc = tf.identity
+		activeFuc = tf.identity
 
 	if(para.rnnCellType == 1):
 		cell = tf.contrib.rnn.BasicLSTMCell(hiddenSize, activation = activeFuc, forget_bias = para.forgetBias)		
@@ -697,18 +696,18 @@ def gridRnnModel(maxLen, para):
 
 
 		r = tf.constant(range(1,6), shape = [5,1], dtype = tf.float32)
-		y =  tf.matmul(prob, r) 
+		y = tf.matmul(prob, r) 
 		label = __scoreLabel2p(score)	
 
 		
 		wPenalty = __applyL2Norm()
-		#wPenalty = L2Strength * (tf.reduce_sum(tf.square(w)) + tf.reduce_sum(tf.square(w_a)) + tf.reduce_sum(tf.square(w_d)))	# weight decay penalty
+		# wPenalty = L2Strength * (tf.reduce_sum(tf.square(w)) + tf.reduce_sum(tf.square(w_a)) + tf.reduce_sum(tf.square(w_d)))	# weight decay penalty
 		#-------------------
 		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels = label, logits = logits, name = 'cross_entropy_loss')) + wPenalty
 		pearson_r = __pearson_r(y, score)
 
 		# add summary for tensorboard visulization
-		prob_mse = tf.reduce_mean(  tf.reduce_sum((prob-label)**2, axis = 1))	
+		prob_mse = tf.reduce_mean( tf.reduce_sum((prob-label)**2, axis = 1))	
 		mse = tf.reduce_mean(tf.square(y - score))
 		tf.summary.scalar('probability_MSE', prob_mse)
 		tf.summary.scalar('similarity_MSE', mse)
@@ -718,9 +717,9 @@ def gridRnnModel(maxLen, para):
 	elif(para.similarityMetric == 2):
 		# In "Manhattan" metric, we derive the estimation of similarity directly from the Mahhattan distance of the final states of LSTM 		
 		prob = tf.exp(-tf.reduce_sum(tf.abs(feas1[0] - feas2[0]), axis = 1, keep_dims = True))
-		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
-		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape =  [1, 1], stddev = 0.1))
+		a = tf.get_variable('regression_coef_a', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		b = tf.get_variable('regression_coef_b', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
+		c = tf.get_variable('regression_coef_c', initializer = tf.truncated_normal(shape = [1, 1], stddev = 0.1))
 		prob = a*prob**2 + b*prob + c
 		label = __rescaleLabel(score)
 		wPenalty = __applyL2Norm()
@@ -736,7 +735,7 @@ def gridRnnModel(maxLen, para):
 
 
 	outputs1 = tf.constant(0,dtype=tf.int32)
-	outputs2 = tf.constant(0,dtype=tf.int32)	# useless
+	outputs2 = tf.constant(0,dtype=tf.int32)  # useless
 	return [sent1, sent2, score, lens1, lens2], loss, prob, y, prob_mse, mse, outputs1, outputs2, pearson_r, h_ta
 
 def averageModel(maxLen, para):		
@@ -762,12 +761,12 @@ def averageModel(maxLen, para):
 		feas2 = __extractFeaVec(wordEmb2, lens2)
 
 	feaVec = __feaTransform_v2(feas1, feas2, para.finalFeaSize)	
- 
+
 	# softmax layer
 	prob, logits = __softmaxLayer(feaVec, 5)
 	r = tf.constant(range(1,6), shape = [5,1], dtype = tf.float32)
-	y =  tf.matmul(prob, r) 
-	prob_mse = tf.reduce_mean(  tf.reduce_sum((prob-label)**2, axis = 1))	
+	y = tf.matmul(prob, r) 
+	prob_mse = tf.reduce_mean( tf.reduce_sum((prob-label)**2, axis = 1))	
 	mse = tf.reduce_mean(tf.square(y - score))
 	#pearson_r, _ = tf.contrib.metrics.streaming_pearson_correlation(y, score)	# the second return value is update_op
 	pearson_r = __pearson_r(y, score)
@@ -816,8 +815,8 @@ def __feaTransform(feas1, feas2, outputSize):
 	feas_a = []	
 	feas_d = []
 	for fea1,fea2 in zip(feas1, feas2):		
-		h_angle = tf.multiply(fea1, fea2)	# get angle feature
-		h_dist = tf.abs(fea1-fea2)		# get distance feature
+		h_angle = tf.multiply(fea1, fea2)  # get angle feature
+		h_dist = tf.abs(fea1-fea2)  # get distance feature
 		feas_a.append(h_angle)
 		feas_d.append(h_dist)
 
@@ -857,14 +856,14 @@ def __scoreLabel2p(score):
 	'''
 	the relatedness score is range from 1 to 5, for a certian score
 	p[i] = score - floor(score),			for i = floor(score)+1
-	     = floor(score) + 1 - score, 		for i = floor(score)
-	     = 0								otherwise
+	   = floor(score) + 1 - score, 		for i = floor(score)
+	   = 0								otherwise
 	e.g 
 		score = 4.2 corresponds to the following polynomial distribution
 
 						| x=1 | x=2 | x=3 | x=4 | x=5 |
 						+-----+-----+-----+-----+-----+	
-	probabilty of p(x) 	|  0  |  0  |  0  | 0.8 | 0.2 |
+	probabilty of p(x) 	| 0 | 0 | 0 | 0.8 | 0.2 |
 	'''
 	score -= 1		
 	i = range(5)
@@ -874,10 +873,10 @@ def __scoreLabel2p(score):
 	return p
 	
 # rescale the label to the range from 0 to 1 
-def  __rescaleLabel(score, inverse = False):
+def __rescaleLabel(score, inverse = False):
 	'''
 	the relatedness score is range from 1 to 5, rescale it with the following formula:
-	scaled_score  = (score - 1) / 4
+	scaled_score = (score - 1) / 4
 	this is an linear trasform
 	'''
 	if(inverse):
