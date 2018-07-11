@@ -149,6 +149,8 @@ class LBAData():
 		file_to_read = open(path, 'r')
 		for line in file_to_read:
 			word, word_id = line.split('\t')
+			print word
+			print word_id
 			self.tokenMap[int(word_id)] = word
 		file_to_read.close()
 

@@ -14,6 +14,7 @@ import utils
 import jieba
 import io
 import random
+import sys
 
 print '===================data transform======================='
 inDir = './data/LibBA'
@@ -21,6 +22,8 @@ outDir = './data/LibBA'
 
 if not os.path.exists(outDir):
 	os.makedirs(outDir)
+
+isPython3 = True if sys.version_info[0] >= 3 else False
 
 d = 300
 vocbPath = './data/FastText/wiki.zh.vec'  # need an chinese embbedding vocabulary
@@ -46,7 +49,10 @@ vocbFile.close()
 vocPath = outDir + '/vocb.txt'
 vocFile = open(vocPath, "w")
 for word in vocbList:
-	vocFile.writelines(str(word.encode('utf-8') + ('\t' +  str(vocb[word]) + '\n').encode('utf-8')))
+	if (isPython3):
+		vocFile.writelines(word + '\t' +  str(vocb[word]) + '\n')
+	else:
+		vocFile.writelines(word.encode('utf-8') + '\t' +  str(vocb[word]) + '\n')
 vocFile.close()
 print 'corups vocabulary word saved at %s' % vocPath
 
@@ -73,7 +79,10 @@ for r, line in enumerate(inCVSFile):
 		jieba_seg = ' '.join(jieba.cut(ABS))
 		outLabelFile.writelines(CLC + '\n')
 		outABSFile.writelines(ABS + '\n')
-		outJiebaFile.writelines(str(jieba_seg.encode('utf-8') + '\n'.encode('utf-8')))
+		if (isPython3):
+			outJiebaFile.writelines(jieba_seg + '\n')
+		else:
+			outJiebaFile.writelines(jieba_seg.encode('utf-8') + '\n')
 
 		token = []		
 		for word in jieba_seg.split(' '):
@@ -102,7 +111,10 @@ outJiebaFile.close()
 oovPath = outDir + '/oov.txt'
 oovFile = open(oovPath, "w")
 for key in oov:
-	oovFile.writelines(str(key.encode('utf-8') +'\n'.encode('utf-8')))
+	if (isPython3):
+		oovFile.writelines(key +'\n')
+	else:
+		oovFile.writelines(key.encode('utf-8') +'\n')
 oovFile.close()
 print 'out of vocabulary word saved at %s' % oovPath
 
