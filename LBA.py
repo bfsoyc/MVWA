@@ -64,7 +64,7 @@ class LBAData():
 		return retA, retB, label , lenA, lenB
 
 	def truncate(self, len_limit):
-	 	self.rawData = [sent[:len_limit] for sent in self.rawData]
+		self.rawData = [sent[:len_limit] for sent in self.rawData]
 		self.slen = map(lambda x:min(x, len_limit), self.slen)
 		self.maxLen = max(self.slen)
 		print '|------------------text truncate %3d-------------------|' % (len_limit)
