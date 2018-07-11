@@ -223,13 +223,11 @@ def loadData(dataPath, vocbSize = 2, level = 1):
 	for r, line in enumerate(inFile):
 		items = line.split('\t')
 		label = utils.retriveMajorCLC(items[1], level)
-
-                sent = map(int, items[0].split(' '))		
+		sent = map(int, items[0].split(' '))		
 		data.rawData.append(sent)
 		data.slen.append(len(sent))
 		data.rawLabel.append(label)
 		data.categories.setdefault(label, []).append(r)
-
 		maxLen = max(maxLen, len(sent))
 
 	data.rawData = [sent + [vocbSize - 1] * (maxLen - len(sent)) for sent in data.rawData]
