@@ -73,7 +73,7 @@ class WikiQAData():
 		print 'training set get shuffled@@@@@@@@@@@@@@@@@@@@@@@@@@@@epoch:\t %d' % self.epoch
 	
 	def truncate(self, len_limit):
-	 	self.rawDataA = [sent[:len_limit] for sent in self.rawDataA]
+		self.rawDataA = [sent[:len_limit] for sent in self.rawDataA]
 		self.rawDataB = [sent[:len_limit] for sent in self.rawDataB]
 		self.slenA = map(lambda x:min(x,len_limit), self.slenA)
 		self.slenB = map(lambda x:min(x,len_limit), self.slenB)
