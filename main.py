@@ -222,7 +222,7 @@ class modelManeger:
 
 		elif (self.para.dataset == 'LBA'):
 				#self.datas.inspectSentByLabel('test', 'Q')  # debug use
-				s1, s2, score, slen1, slen2, evalSet_label, ref_label, L = self.datas.getEvalSet('both', label_set = 'Q') # inspect all incorrect classificated sample with label Q
+				s1, s2, score, slen1, slen2, evalSet_label, ref_label, L = self.datas.getEvalSet('both', label_set = 'all') # inspect all incorrect classificated sample with label Q
 				
 				sc = np.reshape(score, (-1, 1))
 				labelMap = self.datas.digitLabel
@@ -232,7 +232,7 @@ class modelManeger:
 					prob_list = []
 					# for each samples in evaluation set, we have L sentences pairs.
 					# we split these L records in small batches to process since L is too large.
-					for batch_idx in range(L / 500 + 1):
+					for batch_idx in range(int(L / 500 + 1)):
 						batch_datas = [fd[batch_idx * 500 : (batch_idx + 1) * 500] for fd in feedDatas]
 						_, _prob_pos = sess.run([self.tensorDict['loss'], self.tensorDict['prob_of_positive']], feed_dict = {placeholder : feedData for placeholder, feedData in zip(self.placehodlers, batch_datas)})
 						prob_list.append(_prob_pos)

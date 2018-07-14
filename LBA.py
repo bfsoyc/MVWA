@@ -38,7 +38,7 @@ class LBAData():
 		lenA = []
 		lenB = []
 		# we sample positive sample one third of the batch
-		num_of_pos_sample = batchSize / 3
+		num_of_pos_sample = int(batchSize / 3)
 		for i in range(num_of_pos_sample):
 			posCat = random.choice(Categories)  # postive category in batch
 			a, b = random.sample(self.trainSet[posCat], 2)
