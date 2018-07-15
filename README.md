@@ -1,8 +1,10 @@
 # MVWA
 This model caputures the semantic similarity between two short text(sentence). It's simple but very effective on some NLP task.<br>
 We evaluate our model on 3 dataset: `SICK dataset`, `WikiQA dataset` and a authorized use only `LibBA dataset` derived from the abstract of publication. To run the model on sepcified dataset you have to prepare the data and the pre-train word vector at first.<br>
-The code is writen in python2. If you are using python3, try:
-		2to3 -w ./
+The code is writen in python2. If you are using python3, try:<br>
+```
+2to3 -w ./
+```
 
 -------
 #### Take an example: Run the model on SICK dataset
@@ -16,8 +18,10 @@ Unzip and Copy the corresponding resource to ./data/glove.6B/glove.6B.300d.txt
 
 Run the `dataTransformSICK.py` python script in root dir.
 
-Run the main script to train and evaluate the model with given configuration text file, in terminal:
-		python main.py -config configSICK.txt
+Run the main script to train and evaluate the model with given configuration text file, in terminal:<br>
+```
+python main.py -config configSICK.txt
+```
 
 Enjoy your journey to metaphysics~
 
