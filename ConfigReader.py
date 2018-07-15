@@ -3,6 +3,7 @@ class Parameters:
 		# some paramters have to be initialized
 		self.TrainFlag = 0
 		self.PredictFlag = 0
+		self.use_cpu = 0  # use gpu by default
 
 		inFile = open(config, 'r')
 		for line in inFile:
@@ -63,6 +64,8 @@ class Parameters:
 				exec 'self.%s = \'%s\'' % (key, str(value))
 			elif (key == 'dataset'):
 				exec 'self.%s = \'%s\'' % (key, str(value))
+			elif (key == 'use_cpu'):
+				exec 'self.%s = \'%s\'' % (key, int(value))
 			else:
 				raise Exception("unrecognized parameter '%s' in configuration file"  % key)
 		inFile.close()

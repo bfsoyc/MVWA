@@ -19,6 +19,7 @@ import random
 import argparse
 import numpy as np
 import tensorflow as tf
+import os
 
 class modelManeger:
 
@@ -98,25 +99,13 @@ class modelManeger:
 				sc = np.reshape(score, (-1, 1))
 				feedDatas = [s1, s2, sc, slen1, slen2]
 				_loss, _prob, _y, _merged, _prob_mse, _mse, _pr, _a1, _a2 = sess.run([self.tensorDict['loss'], self.tensorDict['prob'], self.tensorDict['y'], merged, self.tensorDict['prob_mse'], self.tensorDict['mse'], self.tensorDict['pearson_r'], self.tensorDict['sent1_annotation'], self.tensorDict['sent2_annotation']], feed_dict = {placeholder : feedData for placeholder,feedData in zip(self.placehodlers, feedDatas)})
-				#_loss, _prob, _y, _merged, _prob_mse, _mse, _pr = sess.run([self.loss, self.prob, self.pred, merged, self.prob_mse, self.mse, self.pr], feed_dict = { placeholder: feedData  for placeholder,feedData in zip(self.placehodlers, feedDatas) })
 				print 'valid set loss: \t' + str(_loss)
 				print 'valid set prob_MSE: \t' + str(_prob_mse)
 				print 'valid set score_MSE: \t' + str(_mse)
 				print 'valid set pearson_r: \t', _pr
 				print 'valid set spearman_rho: \t', utils.spearman_rho(_y, sc)			 
-				'''
-				iid = random.randint(0,len(s1))			
-				self.datas.displaySent(s1[iid] , slen1[iid])	# TODO: what if slen1 is not set
-				self.datas.displaySent(s2[iid] , slen2[iid])
-
-				print 'attention perspective one:'				
-				print np.reshape(_a1[iid,:slen1[iid],0], newshape = [-1])
-				print np.reshape(_a2[iid,:slen2[iid],0], newshape = [-1])
-				print 'another perspective:'
-				print np.reshape(_a1[iid,:slen1[iid],1], newshape = [-1])
-				print np.reshape(_a2[iid,:slen2[iid],1], newshape = [-1])
-				'''				
-				# we also examine on test set for demonstration
+			
+				# we also examine on test set for demonstration(slow down the training phase at the same time). This part may cause OOM(out of memory) if you use GPU
 				s1, s2, score, slen1, slen2, idx = self.datas.getTestSet()
 				sc = np.reshape(score,(-1,1))
 				feedDatas = [s1, s2, sc, slen1, slen2]
@@ -244,12 +233,6 @@ class modelManeger:
 					if (k % (len(evalSet_label) / 100) == 0):
 						print 'progress: %f' % (1.0 * k / len(evalSet_label))
 						print M
-					if (true_label != pred_label):
-						print 'True Label %s' % evalSet_label[k]
-						self.datas.displaySent(s1[k * L], slen1[k * L])
-						for cc,idx in enumerate(rk):
-							print 'Rank %d A: %s' % (cc, A[k * L + idx])
-							self.datas.displaySent(s2[k * L + idx], slen2[k * L + idx])
 				print 'confusion matrix:\t '
 				print np.array2string(M)			
 				print 'over all accuracy: %f' % (1.0 * np.sum(np.diag(M)) / np.sum(M))
@@ -264,6 +247,10 @@ if __name__ == '__main__':
 	config = args.config[0]
 	para = confrd.Parameters(config)
 	para.printAll()
+	if (para.use_cpu == 1):
+		os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+	tf.logging.set_verbosity(tf.logging.WARN)
+
 	model = modelManeger(para)
 	if (para.TrainFlag):
 		model.train()

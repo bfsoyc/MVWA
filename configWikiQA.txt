@@ -16,6 +16,7 @@ keepProb	1
 trainEmbedding	1
 forgetBias	2	
 penalty_strength	0.0001
+use_cpu	1	# use cpu only
 
 # parameter of the model structure
 modelType	6	# 1:averageModel 2: rnnModel 3: selfRnnModel( an unroll rnn model ) 4: gridRnnModel( 2D-rnn ) 5: selfAttentionRnnModel 6: experimentalModel
